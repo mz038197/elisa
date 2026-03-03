@@ -44,4 +44,34 @@ describe('resolveDeployOrder', () => {
   it('returns empty array for empty input', () => {
     expect(resolveDeployOrder([], new Map() as any)).toEqual([]);
   });
+
+  it('handles multiple instances of the same pluginId', () => {
+    const devices = [
+      { pluginId: 'box3', instanceId: 'b1', fields: {} },
+      { pluginId: 'box3', instanceId: 'b2', fields: {} },
+    ];
+    const manifests = new Map([
+      ['box3', { deploy: { method: 'flash', provides: ['endpoint'], requires: [], flash: {} } }],
+    ]);
+    const order = resolveDeployOrder(devices, manifests as any);
+    expect(order).toHaveLength(2);
+    expect(order.map(d => d.instanceId)).toEqual(['b1', 'b2']);
+  });
+
+  it('sorts with mixed duplicate and dependent devices', () => {
+    const devices = [
+      { pluginId: 'gateway', instanceId: 'g1', fields: {} },
+      { pluginId: 'cloud', instanceId: 'c1', fields: {} },
+      { pluginId: 'gateway', instanceId: 'g2', fields: {} },
+    ];
+    const manifests = new Map([
+      ['cloud', { deploy: { method: 'cloud', provides: ['cloud_url'], requires: [] } }],
+      ['gateway', { deploy: { method: 'flash', provides: [], requires: ['cloud_url'], flash: {} } }],
+    ]);
+    const order = resolveDeployOrder(devices, manifests as any);
+    const ids = order.map(d => d.pluginId);
+    // Cloud must come before both gateways
+    expect(ids[0]).toBe('cloud');
+    expect(order).toHaveLength(3);
+  });
 });

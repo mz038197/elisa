@@ -11,6 +11,7 @@ export interface DeviceInstance {
 /**
  * Sort devices into deploy order using provides/requires dependencies.
  * Devices that provide keys required by other devices are deployed first.
+ * Multiple instances of the same pluginId are kept together in sorted order.
  * Throws if a circular dependency is detected.
  */
 export function resolveDeployOrder(
@@ -19,32 +20,37 @@ export function resolveDeployOrder(
 ): DeviceInstance[] {
   if (devices.length === 0) return [];
 
+  // Deduplicate by pluginId for the topological sort (the DAG is
+  // between device *types*, not instances). Multiple instances of the
+  // same type share the same provides/requires and deploy together.
+  const uniquePluginIds = [...new Set(devices.map(d => d.pluginId))];
+
   // Build a map from provided key -> pluginId
   const providerOf = new Map<string, string>();
-  for (const device of devices) {
-    const manifest = manifests.get(device.pluginId);
+  for (const pluginId of uniquePluginIds) {
+    const manifest = manifests.get(pluginId);
     if (!manifest) continue;
     for (const key of manifest.deploy.provides) {
-      providerOf.set(key, device.pluginId);
+      providerOf.set(key, pluginId);
     }
   }
 
   // Build dependency graph: pluginId -> set of pluginIds it depends on
   const deps = new Map<string, Set<string>>();
-  for (const device of devices) {
-    const manifest = manifests.get(device.pluginId);
+  for (const pluginId of uniquePluginIds) {
+    const manifest = manifests.get(pluginId);
     if (!manifest) {
-      deps.set(device.pluginId, new Set());
+      deps.set(pluginId, new Set());
       continue;
     }
     const required = new Set<string>();
     for (const key of manifest.deploy.requires) {
       const provider = providerOf.get(key);
-      if (provider && provider !== device.pluginId) {
+      if (provider && provider !== pluginId) {
         required.add(provider);
       }
     }
-    deps.set(device.pluginId, required);
+    deps.set(pluginId, required);
   }
 
   // Kahn's topological sort
@@ -62,10 +68,9 @@ export function resolveDeployOrder(
     }
   }
 
-  // Seed queue with zero-indegree nodes in input order
-  const inputOrder = devices.map(d => d.pluginId);
+  // Seed queue with zero-indegree nodes in original order
   const queue: string[] = [];
-  for (const id of inputOrder) {
+  for (const id of uniquePluginIds) {
     if ((inDegree.get(id) ?? 0) === 0) {
       queue.push(id);
     }
@@ -86,13 +91,22 @@ export function resolveDeployOrder(
     throw new Error('Circular dependency cycle detected in device deploy order');
   }
 
-  // Map sorted pluginIds back to device instances in sorted order
-  const deviceByPlugin = new Map<string, DeviceInstance>();
+  // Expand sorted pluginIds back to all device instances, preserving
+  // input order among instances of the same type.
+  const instancesByPlugin = new Map<string, DeviceInstance[]>();
   for (const device of devices) {
-    deviceByPlugin.set(device.pluginId, device);
+    let list = instancesByPlugin.get(device.pluginId);
+    if (!list) {
+      list = [];
+      instancesByPlugin.set(device.pluginId, list);
+    }
+    list.push(device);
   }
 
-  return sorted
-    .filter(id => deviceByPlugin.has(id))
-    .map(id => deviceByPlugin.get(id)!);
+  const result: DeviceInstance[] = [];
+  for (const pluginId of sorted) {
+    const instances = instancesByPlugin.get(pluginId);
+    if (instances) result.push(...instances);
+  }
+  return result;
 }
