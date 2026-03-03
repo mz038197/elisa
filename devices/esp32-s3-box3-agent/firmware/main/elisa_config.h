@@ -32,14 +32,18 @@ extern "C" {
  * Written by the Elisa backend's EsptoolFlashStrategy during deploy.
  */
 typedef struct {
-    char agent_id[64];       /**< UUID from agent provisioning */
-    char api_key[128];       /**< Runtime API key (eart_ prefixed) */
-    char runtime_url[256];   /**< Base URL of Elisa runtime server */
-    char wifi_ssid[64];      /**< WiFi network SSID */
-    char wifi_password[64];  /**< WiFi network password */
-    char agent_name[64];     /**< Human-readable agent name */
-    char wake_word[64];      /**< Wake word for ESP-SR (e.g. "Hi Elisa") */
-    char display_theme[32];  /**< Theme ID (matches backend DisplayTheme.id) */
+    char agent_id[64];          /**< UUID from agent provisioning */
+    char api_key[128];          /**< Runtime API key (eart_ prefixed) */
+    char runtime_url[256];      /**< Base URL of Elisa runtime server */
+    char wifi_ssid[64];         /**< WiFi network SSID */
+    char wifi_password[64];     /**< WiFi network password */
+    char agent_name[64];        /**< Human-readable agent name */
+    char wake_word[64];         /**< Wake word for ESP-SR (e.g. "Hi Elisa") */
+    char display_theme[32];     /**< Theme ID (matches backend DisplayTheme.id) */
+    char openai_api_key[128];   /**< OpenAI API key for Whisper STT + TTS (direct mode) */
+    char anthropic_api_key[128];/**< Anthropic API key for Claude Messages API (direct mode) */
+    char system_prompt[512];    /**< Agent personality system prompt */
+    char tts_voice[16];         /**< TTS voice: nova, onyx, shimmer, echo */
 } elisa_runtime_config_t;
 
 // ── Face State Machine ──────────────────────────────────────────────────

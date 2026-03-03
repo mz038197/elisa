@@ -302,6 +302,10 @@ export function buildRuntimeConfig(
     wake_word: (deviceFields.WAKE_WORD as string) || 'Hi Elisa',
     display_theme: (deviceFields.DISPLAY_THEME as string) || 'default',
     face_descriptor: runtimeConfig?.face_descriptor ?? DEFAULT_FACE,
+    openai_api_key: process.env.OPENAI_API_KEY ?? '',
+    anthropic_api_key: process.env.ANTHROPIC_API_KEY ?? '',
+    system_prompt: 'You are a helpful voice assistant. Keep responses to 1-2 sentences.',
+    tts_voice: (deviceFields.TTS_VOICE as string) || 'nova',
   };
 }
 

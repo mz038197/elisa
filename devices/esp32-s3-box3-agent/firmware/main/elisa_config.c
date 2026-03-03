@@ -163,9 +163,19 @@ int elisa_load_config(void) {
     safe_strcpy(s_config.wake_word, sizeof(s_config.wake_word), root, "wake_word", "Hi Elisa");
     safe_strcpy(s_config.display_theme, sizeof(s_config.display_theme), root, "display_theme", "default");
 
-    /* Validate required fields */
-    if (strlen(s_config.agent_id) == 0 || strlen(s_config.api_key) == 0 || strlen(s_config.runtime_url) == 0) {
-        ESP_LOGE(TAG, "Missing required config fields (agent_id, api_key, or runtime_url)");
+    /* Direct API mode fields */
+    safe_strcpy(s_config.openai_api_key, sizeof(s_config.openai_api_key), root, "openai_api_key", NULL);
+    safe_strcpy(s_config.anthropic_api_key, sizeof(s_config.anthropic_api_key), root, "anthropic_api_key", NULL);
+    safe_strcpy(s_config.system_prompt, sizeof(s_config.system_prompt), root, "system_prompt",
+                "You are a helpful voice assistant. Keep responses to 1-2 sentences for natural conversation.");
+    safe_strcpy(s_config.tts_voice, sizeof(s_config.tts_voice), root, "tts_voice", "nova");
+
+    /* Determine mode: direct API (has openai+anthropic keys) or runtime (has agent_id+api_key+runtime_url) */
+    bool has_direct_keys = (strlen(s_config.openai_api_key) > 0 && strlen(s_config.anthropic_api_key) > 0);
+    bool has_runtime_keys = (strlen(s_config.agent_id) > 0 && strlen(s_config.api_key) > 0 && strlen(s_config.runtime_url) > 0);
+
+    if (!has_direct_keys && !has_runtime_keys) {
+        ESP_LOGE(TAG, "Missing required config: need either (openai_api_key + anthropic_api_key) or (agent_id + api_key + runtime_url)");
         cJSON_Delete(root);
         return -1;
     }
@@ -177,9 +187,9 @@ int elisa_load_config(void) {
     cJSON_Delete(root);
     s_config_loaded = true;
 
-    ESP_LOGI(TAG, "Config loaded: agent=%s name=%s wake=%s theme=%s",
-             s_config.agent_id, s_config.agent_name,
-             s_config.wake_word, s_config.display_theme);
+    ESP_LOGI(TAG, "Config loaded: name=%s wake=%s theme=%s mode=%s",
+             s_config.agent_name, s_config.wake_word, s_config.display_theme,
+             has_direct_keys ? "direct" : "runtime");
 
     return 0; /* ESP_OK */
 }

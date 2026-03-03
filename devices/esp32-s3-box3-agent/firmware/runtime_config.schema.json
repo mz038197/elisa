@@ -4,7 +4,7 @@
   "title": "Elisa Runtime Config",
   "description": "Configuration written to SPIFFS by EsptoolFlashStrategy. Read by firmware on boot.",
   "type": "object",
-  "required": ["agent_id", "api_key", "runtime_url", "wifi_ssid", "wifi_password"],
+  "required": ["wifi_ssid", "wifi_password"],
   "properties": {
     "agent_id": {
       "type": "string",
@@ -48,6 +48,28 @@
       "description": "Display theme ID (matches DisplayTheme.id)",
       "default": "default",
       "maxLength": 32
+    },
+    "openai_api_key": {
+      "type": "string",
+      "description": "OpenAI API key for direct Whisper STT + TTS (direct mode)",
+      "maxLength": 128
+    },
+    "anthropic_api_key": {
+      "type": "string",
+      "description": "Anthropic API key for direct Claude Messages API (direct mode)",
+      "maxLength": 128
+    },
+    "system_prompt": {
+      "type": "string",
+      "description": "Agent personality system prompt",
+      "default": "You are a helpful voice assistant. Keep responses to 1-2 sentences for natural conversation.",
+      "maxLength": 512
+    },
+    "tts_voice": {
+      "type": "string",
+      "description": "TTS voice selection",
+      "enum": ["nova", "onyx", "shimmer", "echo"],
+      "default": "nova"
     },
     "face_descriptor": {
       "type": "object",

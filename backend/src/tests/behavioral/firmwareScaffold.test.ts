@@ -126,9 +126,7 @@ describe('runtime_config.schema.json', () => {
 
     expect(schema.$schema).toContain('json-schema.org');
     expect(schema.type).toBe('object');
-    expect(schema.required).toContain('agent_id');
-    expect(schema.required).toContain('api_key');
-    expect(schema.required).toContain('runtime_url');
+    // WiFi is always required; runtime/direct API keys are mode-dependent
     expect(schema.required).toContain('wifi_ssid');
     expect(schema.required).toContain('wifi_password');
   });
@@ -139,6 +137,7 @@ describe('runtime_config.schema.json', () => {
       'agent_id', 'api_key', 'runtime_url',
       'wifi_ssid', 'wifi_password',
       'agent_name', 'wake_word', 'display_theme',
+      'openai_api_key', 'anthropic_api_key', 'system_prompt', 'tts_voice',
       'face_descriptor',
     ];
 

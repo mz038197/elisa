@@ -105,6 +105,34 @@ void elisa_api_free_response(elisa_turn_response_t *response);
  */
 void elisa_api_cleanup(void);
 
+// ── Direct Claude API (no runtime required) ─────────────────────────────
+
+/**
+ * Initialize the Claude API client for direct calls.
+ *
+ * Stores the API key and system prompt in file-statics. Must be called
+ * before elisa_claude_chat(). Used in direct API mode where the device
+ * calls Anthropic directly instead of going through the Elisa runtime.
+ *
+ * @param api_key   Anthropic API key
+ * @param system_prompt  System prompt for the agent personality
+ * @return 0 on success, -1 on error
+ */
+int elisa_claude_init(const char *api_key, const char *system_prompt);
+
+/**
+ * Send a text message to Claude Messages API and get a text response.
+ *
+ * POSTs to https://api.anthropic.com/v1/messages with the configured
+ * API key and system prompt. Uses claude-haiku-4-5-20251001 for fast
+ * voice responses.
+ *
+ * @param user_message  The user's transcribed speech text
+ * @param response_text Output: malloc'd response string (caller frees)
+ * @return 0 on success, -1 on error
+ */
+int elisa_claude_chat(const char *user_message, char **response_text);
+
 #ifdef __cplusplus
 }
 #endif

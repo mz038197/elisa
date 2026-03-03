@@ -3,9 +3,18 @@
  * @brief Main application entry point for Elisa agent on ESP32-S3-BOX-3.
  *
  * Boots the device, initializes peripherals using chatgpt_demo's existing
- * drivers, and bridges into the Elisa runtime API. The chatgpt_demo's
- * sr_handler_task handles wake word -> record -> call start_openai() -> play.
- * We provide our own start_openai() that calls the Elisa runtime instead.
+ * drivers, and bridges into the AI pipeline. Supports two modes:
+ *
+ * 1. Direct API mode (POC): Calls OpenAI Whisper STT + Claude Messages API +
+ *    OpenAI TTS directly from the device. No laptop/runtime required.
+ *    Activated when openai_api_key and anthropic_api_key are present in config.
+ *
+ * 2. Runtime mode: Routes all AI calls through the Elisa backend runtime
+ *    (POST /v1/agents/:id/turn/audio). Requires laptop running the backend.
+ *    Activated when agent_id, api_key, and runtime_url are present.
+ *
+ * The chatgpt_demo's sr_handler_task handles wake word -> record ->
+ * call start_openai() -> play. We provide our own start_openai().
  *
  * DEPENDENCIES (from esp-box BSP + chatgpt_demo):
  * - bsp/esp-box-3       -- Board support package
@@ -13,6 +22,7 @@
  * - audio_player        -- Audio playback
  * - app_sr / app_audio  -- chatgpt_demo's audio pipeline
  * - settings            -- chatgpt_demo's sys_param for WiFi bridge
+ * - espressif__openai   -- OpenAI API wrapper (Whisper STT + TTS)
  */
 
 #include <stdio.h>
@@ -35,6 +45,9 @@
 #include "app_audio.h"
 #include "audio_player.h"
 
+/* OpenAI component (from chatgpt_demo managed components) */
+#include "OpenAI.h"
+
 /* Elisa components */
 #include "elisa_config.h"
 #include "elisa_api.h"
@@ -51,15 +64,37 @@ static void init_audio(void);
 static void init_wake_word(const char *wake_word);
 static void conversation_loop(void);
 static void elisa_audio_play_finish_cb(void);
+static esp_err_t start_openai_direct(uint8_t *audio, int wav_len);
+static esp_err_t start_openai_runtime(uint8_t *audio, int wav_len);
 
-// ── Pending Audio Response ──────────────────────────────────────────────
+// ── Mode Flag ───────────────────────────────────────────────────────────
+
+/** True when running in direct API mode (no runtime required). */
+static bool s_direct_mode = false;
+
+// ── Direct Mode State ───────────────────────────────────────────────────
+
+/** OpenAI handle for Whisper STT and TTS (direct mode only). */
+static OpenAI_t *s_openai = NULL;
+static OpenAI_AudioTranscription_t *s_stt = NULL;
+static OpenAI_AudioSpeech_t *s_tts = NULL;
+
+// ── Pending Audio Response (runtime mode) ───────────────────────────────
 
 /**
- * File-static storage for the current turn's audio response.
+ * File-static storage for the current turn's audio response (runtime mode).
  * Must outlive the audio_player_play() call (async playback).
  * Freed in elisa_audio_play_finish_cb() when playback completes.
  */
 static elisa_turn_response_t s_pending_audio_response;
+
+// ── Pending Direct Mode Audio ───────────────────────────────────────────
+
+/** TTS audio data that must outlive async playback (direct mode). */
+static uint8_t *s_pending_tts_data = NULL;
+static size_t s_pending_tts_len = 0;
+/** Claude response text pending free (direct mode). */
+static char *s_pending_response_text = NULL;
 
 // ── Boot Sequence ───────────────────────────────────────────────────────
 
@@ -80,7 +115,10 @@ void app_main(void) {
     }
 
     const elisa_runtime_config_t *config = elisa_get_config();
-    ESP_LOGI(TAG, "Agent: %s (%s)", config->agent_name, config->agent_id);
+    ESP_LOGI(TAG, "Agent: %s", config->agent_name);
+
+    /* Determine mode */
+    s_direct_mode = (strlen(config->openai_api_key) > 0 && strlen(config->anthropic_api_key) > 0);
 
     /* Step 4: Initialize display + face renderer.
      * Use chatgpt_demo's display init pattern with DMA buffer config.
@@ -106,14 +144,33 @@ void app_main(void) {
     elisa_face_set_state(FACE_STATE_THINKING); /* Show "connecting" animation */
     init_wifi(config->wifi_ssid, config->wifi_password);
 
-    /* Step 6: Initialize API client and verify connectivity */
-    elisa_api_init(config);
+    /* Step 6: Initialize API clients based on mode */
+    if (s_direct_mode) {
+        ESP_LOGI(TAG, "Direct API mode -- no runtime required");
 
-    elisa_heartbeat_t hb;
-    if (elisa_api_heartbeat(&hb) == 0 && hb.healthy) {
-        ESP_LOGI(TAG, "Runtime is reachable");
+        /* Initialize OpenAI handle for Whisper STT + TTS */
+        s_openai = OpenAICreate(config->openai_api_key);
+        s_stt = s_openai->audioTranscriptionCreate(s_openai);
+        s_stt->setResponseFormat(s_stt, OPENAI_AUDIO_RESPONSE_FORMAT_TEXT);
+
+        s_tts = s_openai->audioSpeechCreate(s_openai);
+        s_tts->setModel(s_tts, "tts-1");
+        s_tts->setVoice(s_tts, config->tts_voice);
+        s_tts->setResponseFormat(s_tts, OPENAI_AUDIO_RESPONSE_FORMAT_MP3);
+        s_tts->setSpeed(s_tts, 1.0);
+
+        /* Initialize Claude API */
+        elisa_claude_init(config->anthropic_api_key, config->system_prompt);
     } else {
-        ESP_LOGW(TAG, "Runtime not reachable -- will retry in conversation loop");
+        ESP_LOGI(TAG, "Runtime mode -- connecting to %s", config->runtime_url);
+        elisa_api_init(config);
+
+        elisa_heartbeat_t hb;
+        if (elisa_api_heartbeat(&hb) == 0 && hb.healthy) {
+            ESP_LOGI(TAG, "Runtime is reachable");
+        } else {
+            ESP_LOGW(TAG, "Runtime not reachable -- will retry in conversation loop");
+        }
     }
 
     /* Step 7: Initialize audio hardware + wake word engine */
@@ -192,14 +249,9 @@ static void init_wake_word(const char *wake_word) {
 // ── start_openai() -- Replaces chatgpt_demo's Original ─────────────────
 //
 // Called by sr_handler_task in app_audio.c after wake word detection and
-// audio recording. The original sends audio to OpenAI (3 API calls: STT,
-// ChatGPT, TTS). We send it to the Elisa runtime (1 API call).
+// audio recording. Dispatches to direct API mode or runtime mode.
 
 esp_err_t start_openai(uint8_t *audio, int audio_len) {
-    ESP_LOGI(TAG, "Sending WAV (%d bytes) to runtime", audio_len);
-
-    elisa_face_set_state(FACE_STATE_THINKING);
-
     /* Calculate actual WAV size from header.
      * audio_record_stop() writes a standard WAV header at the start of
      * the buffer. The Subchunk2Size field at byte offset 40 gives the
@@ -213,6 +265,96 @@ esp_err_t start_openai(uint8_t *audio, int audio_len) {
             wav_len = computed;
         }
     }
+
+    if (s_direct_mode) {
+        return start_openai_direct(audio, wav_len);
+    } else {
+        return start_openai_runtime(audio, wav_len);
+    }
+}
+
+// ── Direct API Mode ─────────────────────────────────────────────────────
+//
+// Three direct API calls: OpenAI Whisper STT -> Claude -> OpenAI TTS.
+// No runtime/laptop required.
+
+static esp_err_t start_openai_direct(uint8_t *audio, int wav_len) {
+    ESP_LOGI(TAG, "[Direct] Processing WAV (%d bytes)", wav_len);
+
+    /* Step 1: Whisper STT */
+    elisa_face_set_state(FACE_STATE_THINKING);
+
+    char *transcript = s_stt->file(s_stt, audio, wav_len, OPENAI_AUDIO_INPUT_FORMAT_WAV);
+    if (transcript == NULL || strlen(transcript) == 0) {
+        ESP_LOGE(TAG, "[Direct] Whisper STT failed or empty transcript");
+        elisa_face_set_state(FACE_STATE_ERROR);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        elisa_face_set_state(FACE_STATE_IDLE);
+        if (transcript) free(transcript);
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "[Direct] Whisper: %s", transcript);
+
+    /* Step 2: Claude Messages API */
+    char *response_text = NULL;
+    int ret = elisa_claude_chat(transcript, &response_text);
+    free(transcript);
+
+    if (ret != 0 || response_text == NULL) {
+        ESP_LOGE(TAG, "[Direct] Claude chat failed");
+        elisa_face_set_state(FACE_STATE_ERROR);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        elisa_face_set_state(FACE_STATE_IDLE);
+        if (response_text) free(response_text);
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "[Direct] Claude: %s", response_text);
+
+    /* Step 3: OpenAI TTS */
+    elisa_face_set_state(FACE_STATE_SPEAKING);
+
+    OpenAI_SpeechResponse_t speech = s_tts->speech(s_tts, response_text);
+    if (speech.data == NULL || speech.len == 0) {
+        ESP_LOGE(TAG, "[Direct] TTS failed");
+        free(response_text);
+        elisa_face_set_state(FACE_STATE_ERROR);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        elisa_face_set_state(FACE_STATE_IDLE);
+        return ESP_FAIL;
+    }
+    ESP_LOGI(TAG, "[Direct] TTS: %zu bytes MP3", speech.len);
+
+    /* Store data in file-statics (must outlive async playback).
+     * Freed in elisa_audio_play_finish_cb(). */
+    s_pending_tts_data = speech.data;
+    s_pending_tts_len = speech.len;
+    s_pending_response_text = response_text;
+
+    FILE *fp = fmemopen(s_pending_tts_data, s_pending_tts_len, "rb");
+    if (fp != NULL) {
+        audio_player_play(fp);
+    } else {
+        ESP_LOGE(TAG, "fmemopen failed");
+        elisa_face_set_state(FACE_STATE_ERROR);
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        elisa_face_set_state(FACE_STATE_IDLE);
+        free(s_pending_tts_data);
+        s_pending_tts_data = NULL;
+        free(s_pending_response_text);
+        s_pending_response_text = NULL;
+    }
+
+    return ESP_OK;
+}
+
+// ── Runtime Mode ────────────────────────────────────────────────────────
+//
+// Single API call to Elisa runtime (POST /v1/agents/:id/turn/audio).
+
+static esp_err_t start_openai_runtime(uint8_t *audio, int wav_len) {
+    ESP_LOGI(TAG, "[Runtime] Sending WAV (%d bytes) to runtime", wav_len);
+
+    elisa_face_set_state(FACE_STATE_THINKING);
 
     elisa_turn_response_t response;
     int ret = elisa_api_audio_turn(audio, (size_t)wav_len, &response);
@@ -255,7 +397,22 @@ esp_err_t start_openai(uint8_t *audio, int audio_len) {
 
 static void elisa_audio_play_finish_cb(void) {
     elisa_face_set_state(FACE_STATE_IDLE);
-    elisa_api_free_response(&s_pending_audio_response);
+
+    if (s_direct_mode) {
+        /* Free direct mode buffers */
+        if (s_pending_tts_data) {
+            free(s_pending_tts_data);
+            s_pending_tts_data = NULL;
+            s_pending_tts_len = 0;
+        }
+        if (s_pending_response_text) {
+            free(s_pending_response_text);
+            s_pending_response_text = NULL;
+        }
+    } else {
+        /* Free runtime mode response */
+        elisa_api_free_response(&s_pending_audio_response);
+    }
 }
 
 // ── Main Conversation Loop ──────────────────────────────────────────────

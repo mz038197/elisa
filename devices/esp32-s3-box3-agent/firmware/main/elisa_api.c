@@ -15,6 +15,7 @@
  * - esp_http_client (ESP-IDF component)
  * - cJSON (bundled with ESP-IDF)
  * - mbedtls (bundled with ESP-IDF, for base64 decode)
+ * - esp_crt_bundle (for TLS to api.anthropic.com)
  */
 
 #include "elisa_api.h"
@@ -24,6 +25,7 @@
 
 #include "esp_log.h"
 #include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "cJSON.h"
 #include "mbedtls/base64.h"
 
@@ -292,4 +294,173 @@ void elisa_api_free_response(elisa_turn_response_t *response) {
 void elisa_api_cleanup(void) {
     s_initialized = false;
     ESP_LOGI(TAG, "API client cleaned up");
+}
+
+// ── Direct Claude API ───────────────────────────────────────────────────
+
+#define CLAUDE_API_URL "https://api.anthropic.com/v1/messages"
+#define CLAUDE_MODEL   "claude-haiku-4-5-20251001"
+#define CLAUDE_MAX_TOKENS 256
+#define CLAUDE_TIMEOUT_MS 30000
+
+static char s_claude_api_key[128];
+static char s_claude_system_prompt[512];
+static bool s_claude_initialized = false;
+
+int elisa_claude_init(const char *api_key, const char *system_prompt) {
+    if (api_key == NULL || strlen(api_key) == 0) {
+        ESP_LOGE(TAG, "Claude API key is required");
+        return -1;
+    }
+
+    strncpy(s_claude_api_key, api_key, sizeof(s_claude_api_key) - 1);
+    s_claude_api_key[sizeof(s_claude_api_key) - 1] = '\0';
+
+    if (system_prompt != NULL && strlen(system_prompt) > 0) {
+        strncpy(s_claude_system_prompt, system_prompt, sizeof(s_claude_system_prompt) - 1);
+        s_claude_system_prompt[sizeof(s_claude_system_prompt) - 1] = '\0';
+    } else {
+        strncpy(s_claude_system_prompt,
+                "You are a helpful voice assistant. Keep responses to 1-2 sentences for natural conversation.",
+                sizeof(s_claude_system_prompt) - 1);
+    }
+
+    s_claude_initialized = true;
+    ESP_LOGI(TAG, "Claude API initialized (model: " CLAUDE_MODEL ")");
+    return 0;
+}
+
+int elisa_claude_chat(const char *user_message, char **response_text) {
+    if (!s_claude_initialized || user_message == NULL || response_text == NULL) {
+        return -1;
+    }
+    *response_text = NULL;
+
+    /* Build JSON request body */
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "model", CLAUDE_MODEL);
+    cJSON_AddNumberToObject(root, "max_tokens", CLAUDE_MAX_TOKENS);
+    cJSON_AddStringToObject(root, "system", s_claude_system_prompt);
+
+    cJSON *messages = cJSON_AddArrayToObject(root, "messages");
+    cJSON *msg = cJSON_CreateObject();
+    cJSON_AddStringToObject(msg, "role", "user");
+    cJSON_AddStringToObject(msg, "content", user_message);
+    cJSON_AddItemToArray(messages, msg);
+
+    char *body = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    if (body == NULL) {
+        ESP_LOGE(TAG, "Failed to serialize Claude request");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "Claude request: %zu bytes", strlen(body));
+
+    /* Response body accumulator */
+    http_response_ctx_t resp_ctx = { .body = NULL, .body_len = 0, .body_capacity = 0 };
+
+    /* Build auth header value: "Bearer <key>" -- no, Anthropic uses x-api-key */
+    esp_http_client_config_t http_config = {
+        .url = CLAUDE_API_URL,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = CLAUDE_TIMEOUT_MS,
+        .buffer_size = 4096,
+        .event_handler = http_event_handler,
+        .user_data = &resp_ctx,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+
+    esp_http_client_handle_t client = esp_http_client_init(&http_config);
+    if (client == NULL) {
+        ESP_LOGE(TAG, "Failed to init Claude HTTP client");
+        free(body);
+        return -1;
+    }
+
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    esp_http_client_set_header(client, "x-api-key", s_claude_api_key);
+    esp_http_client_set_header(client, "anthropic-version", "2023-06-01");
+    esp_http_client_set_post_field(client, body, (int)strlen(body));
+
+    esp_err_t err = esp_http_client_perform(client);
+    free(body);
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Claude HTTP request failed: %s", esp_err_to_name(err));
+        free(resp_ctx.body);
+        esp_http_client_cleanup(client);
+        return -1;
+    }
+
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+
+    if (status != 200 || resp_ctx.body == NULL || resp_ctx.body_len == 0) {
+        ESP_LOGE(TAG, "Claude API error: status=%d body_len=%zu", status, resp_ctx.body_len);
+        if (resp_ctx.body != NULL) {
+            /* Null-terminate for logging */
+            char *err_body = (char *)realloc(resp_ctx.body, resp_ctx.body_len + 1);
+            if (err_body) {
+                err_body[resp_ctx.body_len] = '\0';
+                ESP_LOGE(TAG, "Claude error body: %.200s", err_body);
+                free(err_body);
+            } else {
+                free(resp_ctx.body);
+            }
+        }
+        return -1;
+    }
+
+    /* Null-terminate response */
+    char *json_str = (char *)realloc(resp_ctx.body, resp_ctx.body_len + 1);
+    if (json_str == NULL) {
+        free(resp_ctx.body);
+        return -1;
+    }
+    json_str[resp_ctx.body_len] = '\0';
+
+    /* Parse Claude Messages API response:
+     * {
+     *   "content": [{ "type": "text", "text": "response here" }],
+     *   "usage": { "input_tokens": N, "output_tokens": N }
+     * }
+     */
+    cJSON *resp_root = cJSON_Parse(json_str);
+    free(json_str);
+
+    if (resp_root == NULL) {
+        ESP_LOGE(TAG, "Failed to parse Claude response JSON");
+        return -1;
+    }
+
+    cJSON *content = cJSON_GetObjectItemCaseSensitive(resp_root, "content");
+    if (cJSON_IsArray(content) && cJSON_GetArraySize(content) > 0) {
+        cJSON *first = cJSON_GetArrayItem(content, 0);
+        cJSON *text_item = cJSON_GetObjectItemCaseSensitive(first, "text");
+        if (cJSON_IsString(text_item) && text_item->valuestring != NULL) {
+            *response_text = strdup(text_item->valuestring);
+        }
+    }
+
+    /* Log usage */
+    cJSON *usage = cJSON_GetObjectItemCaseSensitive(resp_root, "usage");
+    if (cJSON_IsObject(usage)) {
+        cJSON *input_tok = cJSON_GetObjectItemCaseSensitive(usage, "input_tokens");
+        cJSON *output_tok = cJSON_GetObjectItemCaseSensitive(usage, "output_tokens");
+        ESP_LOGI(TAG, "Claude tokens: in=%d out=%d",
+                 cJSON_IsNumber(input_tok) ? input_tok->valueint : 0,
+                 cJSON_IsNumber(output_tok) ? output_tok->valueint : 0);
+    }
+
+    cJSON_Delete(resp_root);
+
+    if (*response_text == NULL) {
+        ESP_LOGE(TAG, "No text content in Claude response");
+        return -1;
+    }
+
+    ESP_LOGI(TAG, "Claude: %s", *response_text);
+    return 0;
 }
