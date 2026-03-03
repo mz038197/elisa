@@ -89,7 +89,21 @@ const EsptoolDeploySchema = z.object({
     flash_offset: z.string().max(20).default('0x0'),
     baud_rate: z.number().int().default(460800),
     chip: z.string().max(30).default('esp32s3'),
+    flash_mode: z.string().max(10).optional(),
+    flash_size: z.string().max(10).optional(),
+    flash_freq: z.string().max(10).optional(),
     prompt_message: z.string().max(200),
+    partition_files: z.array(z.object({
+      file: z.string().max(200),
+      offset: z.string().max(20),
+    })).max(10).default([]),
+    spiffs: z.object({
+      offset: z.string().max(20),
+      size: z.string().max(20),
+      page_size: z.number().int().default(256),
+      obj_name_len: z.number().int().default(32),
+      meta_len: z.number().int().default(4),
+    }).optional(),
   }),
   runtime_provision: RuntimeProvisionSchema.optional(),
 });

@@ -369,12 +369,14 @@ export class EsptoolFlashStrategy implements FlashStrategy {
 
     // Add partition files (bootloader, partition table, OTA, SR models, etc.)
     const partitionFiles: Array<{ file: string; offset: string }> = flashConfig.partition_files ?? [];
+    console.log(`[esptool] partition_files config:`, JSON.stringify(partitionFiles));
     for (const pf of partitionFiles) {
       const pfPath = path.join(pluginDir, pf.file);
       if (fs.existsSync(pfPath)) {
         flashPairs.push(pf.offset, pfPath);
+        console.log(`[esptool] added partition: ${pf.offset} -> ${pfPath}`);
       } else {
-        console.warn(`[esptool] partition file not found, skipping: ${pf.file}`);
+        console.warn(`[esptool] partition file not found, skipping: ${pf.file} (tried ${pfPath})`);
       }
     }
 
@@ -420,6 +422,9 @@ export class EsptoolFlashStrategy implements FlashStrategy {
       ...(flashConfig.flash_freq ? ['--flash_freq', flashConfig.flash_freq] : []),
       ...flashPairs,
     ];
+
+    console.log(`[esptool] command: ${resolved.cmd} ${args.join(' ')}`);
+    console.log(`[esptool] flash pairs count: ${flashPairs.length / 2}`);
 
     // Execute esptool via execFile (no shell)
     try {
