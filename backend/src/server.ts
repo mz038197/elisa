@@ -103,7 +103,7 @@ function getLanIp(): string {
   }
   return 'localhost';
 }
-const lanRuntimeUrl = `http://${getLanIp()}:${port}`;
+const lanRuntimeUrl = `http://${getLanIp()}:${process.env.PORT ?? 8000}`;
 const agentStore = new AgentStore(lanRuntimeUrl);
 const consentManager = new ConsentManager();
 const conversationManager = new ConversationManager(undefined, consentManager);
