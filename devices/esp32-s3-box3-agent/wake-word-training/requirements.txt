@@ -1,0 +1,5 @@
+pyserial>=3.5
+sounddevice>=0.4
+soundfile>=0.12
+audiomentations>=0.35
+numpy>=1.24

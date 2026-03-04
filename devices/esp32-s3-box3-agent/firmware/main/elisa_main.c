@@ -538,13 +538,69 @@ static void elisa_audio_play_finish_cb(void) {
     }
 }
 
+// ── Recording Mode ──────────────────────────────────────────────────────
+//
+// When the device receives "RECORD\n" on UART, it streams raw 16-bit LE
+// PCM at 16kHz to the serial port until it receives "STOP\n".
+// Used by wake-word-training/record.py to capture training samples
+// through the BOX-3's actual microphones.
+
+static volatile bool s_recording = false;
+
+/**
+ * UART command listener task. Checks for RECORD/STOP commands.
+ */
+static void uart_cmd_task(void *arg) {
+    char line_buf[32];
+    int line_len = 0;
+
+    while (1) {
+        int ch = fgetc(stdin);
+        if (ch == EOF) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            continue;
+        }
+        if (ch == '\n' || ch == '\r') {
+            line_buf[line_len] = '\0';
+            if (strcmp(line_buf, "RECORD") == 0) {
+                ESP_LOGI(TAG, "Recording mode: ON");
+                s_recording = true;
+            } else if (strcmp(line_buf, "STOP") == 0) {
+                ESP_LOGI(TAG, "Recording mode: OFF");
+                s_recording = false;
+            }
+            line_len = 0;
+        } else if (line_len < (int)sizeof(line_buf) - 1) {
+            line_buf[line_len++] = (char)ch;
+        }
+    }
+}
+
+/**
+ * Audio recording callback. When s_recording is true, writes raw PCM
+ * samples to stdout (UART) for capture by record.py.
+ *
+ * Called from the I2S audio pipeline in app_audio.c context.
+ * The record.py script reads these bytes over serial.
+ */
+void elisa_recording_feed(const int16_t *samples, size_t count) {
+    if (!s_recording) return;
+    /* Write raw 16-bit LE PCM directly to UART stdout */
+    fwrite(samples, sizeof(int16_t), count, stdout);
+    fflush(stdout);
+}
+
 // ── Main Conversation Loop ──────────────────────────────────────────────
 //
 // The actual conversation is driven by sr_handler_task (from chatgpt_demo's
 // app_audio.c) which calls start_openai(). This loop just logs heartbeats.
+// Also starts the UART command listener for recording mode.
 
 static void conversation_loop(void) {
     ESP_LOGI(TAG, "Entering conversation loop (audio pipeline active)");
+
+    /* Start UART command listener for recording mode */
+    xTaskCreate(uart_cmd_task, "uart_cmd", 2048, NULL, 5, NULL);
 
     while (1) {
         ESP_LOGD(TAG, "Heartbeat -- face state: %d", elisa_face_get_state());
