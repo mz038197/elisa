@@ -560,16 +560,36 @@ export class EsptoolFlashStrategy implements FlashStrategy {
     return { imagePath: outputImage, tempDir };
   }
 
-  /** Find spiffsgen.py from ESP-IDF installation. */
+  /**
+   * Find spiffsgen.py — checks bundled copy first, then ESP-IDF locations.
+   *
+   * Exported (via the static alias) for testing.
+   */
   private async findSpiffsgen(): Promise<string | null> {
-    // Check IDF_PATH environment variable
+    return EsptoolFlashStrategy.findSpiffsgenPath();
+  }
+
+  /**
+   * Static version of findSpiffsgen for testability.
+   * Search order:
+   *   1. Bundled copy at devices/_shared/tools/spiffsgen.py (works without ESP-IDF)
+   *   2. IDF_PATH environment variable
+   *   3. Common ESP-IDF install locations
+   *   4. Python module import
+   */
+  static async findSpiffsgenPath(): Promise<string | null> {
+    // 1. Check bundled copy shipped with the repo
+    const bundled = path.resolve(import.meta.dirname, '..', '..', '..', 'devices', '_shared', 'tools', 'spiffsgen.py');
+    if (fs.existsSync(bundled)) return bundled;
+
+    // 2. Check IDF_PATH environment variable
     const idfPath = process.env.IDF_PATH;
     if (idfPath) {
       const candidate = path.join(idfPath, 'components', 'spiffs', 'spiffsgen.py');
       if (fs.existsSync(candidate)) return candidate;
     }
 
-    // Check common install locations
+    // 3. Check common install locations
     const home = process.env.USERPROFILE || process.env.HOME || '';
     const candidates = [
       path.join(home, 'esp', 'esp-idf', 'components', 'spiffs', 'spiffsgen.py'),
@@ -579,7 +599,7 @@ export class EsptoolFlashStrategy implements FlashStrategy {
       if (fs.existsSync(candidate)) return candidate;
     }
 
-    // Try running it as a module
+    // 4. Try running it as a module
     try {
       await execFileAsync('python', ['-c', 'import spiffsgen'], { timeout: 5000, env: safeEnv() });
       return '-m spiffsgen'; // Not a path, but a module invocation
