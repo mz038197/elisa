@@ -63,6 +63,14 @@ describe('AgentStore', () => {
       expect(result.runtime_url).toBe('http://localhost:8000');
     });
 
+    it('returns LAN IP runtime_url when AgentStore is constructed with one (#167)', () => {
+      const lanStore = new AgentStore('http://192.168.1.42:8000');
+      const result = lanStore.provision(makeSpec());
+
+      expect(result.runtime_url).toBe('http://192.168.1.42:8000');
+      expect(result.runtime_url).not.toContain('localhost');
+    });
+
     it('returns a valid UUID as agent_id', () => {
       const result = store.provision(makeSpec());
       expect(result.agent_id).toMatch(
