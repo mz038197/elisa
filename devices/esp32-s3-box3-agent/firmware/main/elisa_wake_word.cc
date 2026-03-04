@@ -42,8 +42,10 @@ static constexpr int kFeatureCount = 40;          // mel filterbank channels
 static constexpr int kStrideSizeMs = 10;
 static constexpr int kStrideSamples = kSampleRate * kStrideSizeMs / 1000;  // 160
 static constexpr int kModelInputFrames = 3;       // model expects 3 frames per inference
-static constexpr float kProbabilityCutoff = 0.94f; // from training ROC curve
-static constexpr int kSlidingWindowSize = 5;       // frames to average
+static constexpr float kProbabilityCutoff = 0.92f; // lowered from 0.94 for better recall
+static constexpr int kSlidingWindowSize = 7;       // increased from 5 for smoother detection
+static constexpr float kConsecutiveThreshold = 0.85f; // min per-frame prob for consecutive check
+static constexpr int kMinConsecutiveFrames = 3;       // require 3+ frames above threshold
 static constexpr int kMinSlicesBeforeDetect = 74;  // ~740ms minimum before detection
 static constexpr int kTensorArenaSize = 65536;     // bytes for TFLite arena
 static constexpr int kNumResourceVariables = 6;    // streaming state ring buffers
@@ -257,16 +259,24 @@ extern "C" bool elisa_wake_word_detect(const int16_t *audio, size_t samples) {
                 s_prob_idx = (s_prob_idx + 1) % kSlidingWindowSize;
                 s_slices_since_reset++;
 
-                // Check detection
+                // Check detection: mean threshold + consecutive-frame requirement
                 if (s_slices_since_reset >= kMinSlicesBeforeDetect) {
                     float sum = 0.0f;
+                    int consecutive = 0;
+                    int max_consecutive = 0;
                     for (int w = 0; w < kSlidingWindowSize; w++) {
                         sum += s_prob_window[w];
+                        if (s_prob_window[w] >= kConsecutiveThreshold) {
+                            consecutive++;
+                            if (consecutive > max_consecutive) max_consecutive = consecutive;
+                        } else {
+                            consecutive = 0;
+                        }
                     }
                     float mean_prob = sum / kSlidingWindowSize;
 
-                    if (mean_prob >= kProbabilityCutoff) {
-                        ESP_LOGI(TAG, "Wake word detected! prob=%.3f", mean_prob);
+                    if (mean_prob >= kProbabilityCutoff && max_consecutive >= kMinConsecutiveFrames) {
+                        ESP_LOGI(TAG, "Wake word detected! prob=%.3f consec=%d", mean_prob, max_consecutive);
                         return true;
                     }
                 }
