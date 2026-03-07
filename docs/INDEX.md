@@ -29,7 +29,7 @@ Block-based visual programming IDE where kids build software by snapping togethe
 | `frontend/src/components/Skills/` | Skills CRUD modal + template library |
 | `frontend/src/components/Rules/` | Rules CRUD modal + template library |
 | `frontend/src/components/Portals/` | Portal connections modal |
-| `frontend/src/components/Meeting/` | Agent Meeting framework: modal, canvas registry, 8 specialized canvases |
+| `frontend/src/components/Meeting/` | Agent Meeting framework: modal, canvas registry, 13 specialized canvases |
 | `frontend/src/components/shared/` | Reusable: tabs, buttons, modals, toasts, avatars |
 | `frontend/src/hooks/` | React hooks (session state, health, WebSocket, board detect, skills) |
 | `frontend/src/lib/` | Utility functions (nugget files, skill templates, terminology, examples) |

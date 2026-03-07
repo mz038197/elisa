@@ -240,7 +240,7 @@ Static types registered at startup via `register<Type>Meeting(registry)`. Dynami
 
 ### Canvas Types
 
-`canvasRegistry.ts` maps canvas type strings to React components. 12 types: blueprint, bug-detective, campaign, code-explorer, design-preview, explain-it, interface-designer, launch-pad, live-preview, test-dashboard, theme-picker, whiteboard.
+`canvasRegistry.ts` maps canvas type strings to React components. 13 types: agent-studio, blueprint, bug-detective, campaign, code-explorer, design-preview, explain-it, interface-designer, launch-pad, live-preview, test-dashboard, theme-picker, whiteboard.
 
 ### Persistent Team Tab
 

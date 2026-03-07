@@ -81,7 +81,7 @@ App.tsx
 
 ## BlockCanvas Subsystem
 
-- `blockDefinitions.ts`: Custom block types across 13 categories (Goal, Requirements, Tests, Style, Skills, Rules, Portals, Knowledge, Agents, Flow, System, Composition, Deploy). Device plugin blocks add additional categories dynamically.
+- `blockDefinitions.ts`: Custom block types across 14 categories (Goals, Requirements, Tests, Style, Skills, Rules, Portals, Knowledge, Minions, Team, Flow, System, Composition, Deploy). Device plugin blocks add additional categories dynamically.
 - `blockInterpreter.ts`: Walks Blockly workspace JSON, extracts fields, builds NuggetSpec. Device plugin blocks handled generically.
 - `toolbox.ts`: Defines Blockly sidebar categories. Device plugin blocks dynamically added via `buildDeviceCategories()`.
 - `skillFlowToolbox.ts`: Blockly toolbox definition for the skill flow editor.
@@ -95,4 +95,5 @@ App.tsx
 - BlockCanvas stays mounted (hidden via CSS) to preserve Blockly workspace state across tab switches.
 - Auto-switch: build starts -> Agents tab + Progress bottom tab.
 - Modals use fixed positioning with backdrop overlay. Only one modal shows at a time.
+- Done modal: "Fix It" button appears when any task failed, navigates to Team tab for Bug Detective. "Your team wants to chat" button appears when invites are pending.
 - Skills/Rules and workspace state are persisted to localStorage and restored on page load via `syncDesignToStorage` helper.
