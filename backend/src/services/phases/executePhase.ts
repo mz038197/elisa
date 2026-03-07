@@ -229,6 +229,26 @@ export class ExecutePhase {
         launchTask(taskId);
       }
 
+      // Early meeting look-ahead: when idle slots exist, proactively trigger
+      // meeting invites for not-yet-ready tasks so kids can chat while other
+      // tasks run, reducing idle time.
+      if (inFlight.size > 0 && inFlight.size < MAX_CONCURRENT) {
+        for (const task of this.deps.tasks) {
+          const tid = task.id;
+          if (
+            completed.has(tid) || failed.has(tid) || skipped.has(tid) ||
+            inFlight.has(tid) || meetingEvaluated.has(tid) || meetingBlocked.has(tid)
+          ) continue;
+          // Skip tasks that are already ready (handled by the pre-pass above)
+          if (ready.includes(tid)) continue;
+          if (this.wouldTriggerMeeting(tid)) {
+            meetingEvaluated.add(tid);
+            meetingBlocked.add(tid);
+            this.waitForMeetings(ctx, tid, meetingBlocked, meetingDesignContext);
+          }
+        }
+      }
+
       // Wait for at least one in-flight task to complete before re-evaluating
       if (inFlight.size > 0) {
         await Promise.race(inFlight.values());
