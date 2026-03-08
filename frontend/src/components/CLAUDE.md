@@ -98,5 +98,5 @@ App.tsx
 - BlockCanvas stays mounted (hidden via CSS) to preserve Blockly workspace state across tab switches.
 - Auto-switch: build starts -> Agents tab + Progress bottom tab.
 - Modals use fixed positioning with backdrop overlay. Only one modal shows at a time.
-- Done modal: "Fix It" button appears when any task failed, navigates to Team tab for Bug Detective. "Your team wants to chat" button appears when invites are pending.
+- Done modal: "Fix It" button appears when any task failed or tests failing, navigates to Team tab for Bug Detective. "Report a Bug" button always available post-build. "Your team wants to chat" button appears when invites are pending.
 - Skills/Rules and workspace state are persisted to localStorage and restored on page load via `syncDesignToStorage` helper.

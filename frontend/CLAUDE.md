@@ -25,6 +25,7 @@ src/
     Rules/                   Rules editor modal + template library
     Portals/                 Portals editor modal + registry
     Meeting/                 Agent Meeting framework: MeetingModal (composes ChatPanel+CanvasPanel+MeetingLayout), canvasRegistry, DefaultCanvas, ThemePickerCanvas, BugDetectiveCanvas, BlueprintCanvas, CampaignCanvas, ExplainItCanvas, InterfaceDesignerCanvas, LaunchPadCanvas, AgentStudioCanvas, FacePreview
+    TestPanel/               Tests main tab: TestPanel, TestList, AddTestForm (behavioral test management)
     TeamPanel/               Persistent Team tab: TeamPanel, TeamMemberList, TeamConversation (reuses ChatPanel+CanvasPanel)
     shared/                  MainTabBar (workspace/mission/team), GoButton, ModalHost, HumanGateModal, QuestionModal, TeachingToast, AgentAvatar, ReadinessBadge, ExamplePickerModal, DirectoryPickerModal, FlashWizardModal, MeetingInviteToast (auto-dismiss preserves invite), DisplayThemePreview, EsptoolFlashStep, ImpactPreview
   hooks/

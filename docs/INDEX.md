@@ -132,6 +132,7 @@ Block-based visual programming IDE where kids build software by snapping togethe
 | `backend/src/services/integrationAgentMeeting.ts` | Integration meeting type for nugget composition |
 | `backend/src/services/meetingTriggerWiring.ts` | Meeting trigger wiring with team filtering (always-on defaults + opt-in) |
 | `backend/src/services/buddyAgentMeeting.ts` | Buddy Agent meeting type (canvasType: explain-it, always-on at 25%) |
+| `backend/src/services/socialMediaAgentMeeting.ts` | Social Media Agent meeting type (canvasType: campaign, opt-in at 50%) |
 | `backend/src/services/healthHistoryService.ts` | Health-over-time persistence (20-entry cap, .elisa/health-history.json) |
 | `backend/src/services/cloudDeployService.ts` | Google Cloud Run deployment (scaffold, gcloud CLI) |
 | `backend/src/services/architectureAgentMeeting.ts` | Architecture Agent meeting type (canvasType: blueprint) |
@@ -239,6 +240,9 @@ Block-based visual programming IDE where kids build software by snapping togethe
 | `frontend/src/components/Meeting/LivePreviewCanvas.tsx` | Live Preview: iframe web preview with auto-refresh |
 | `frontend/src/components/Meeting/CodeExplorerCanvas.tsx` | Code Explorer: syntax-highlighted viewer with annotations |
 | `frontend/src/components/Meeting/WhiteboardCanvas.tsx` | Whiteboard: free-form HTML5 Canvas drawing with tools |
+| `frontend/src/components/TestPanel/TestPanel.tsx` | Main Tests tab: summary stats, test list, add test form |
+| `frontend/src/components/TestPanel/TestList.tsx` | Test result list with pass/fail icons and expandable error details |
+| `frontend/src/components/TestPanel/AddTestForm.tsx` | Form to add behavioral tests (when/then) |
 | `frontend/src/components/shared/ImpactPreview.tsx` | Pre-execution impact preview card (task estimate, complexity, heaviest reqs) |
 
 ### Hooks

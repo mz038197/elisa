@@ -81,6 +81,7 @@ src/
     docAgentMeeting.ts   Documentation Agent meeting type (canvasType: explain-it)
     mediaAgentMeeting.ts Marketing Agent meeting type (canvasType: campaign, opt-in via team blocks)
     webDesignAgentMeeting.ts  Web Designer Agent meeting type (canvasType: launch-pad)
+    socialMediaAgentMeeting.ts  Social Media Agent meeting type (canvasType: campaign, opt-in)
     integrationAgentMeeting.ts  Integration meeting type for nugget composition
     runtimeProvisioner.ts Interface + Stub/Local implementations for agent provisioning
     runtime/
@@ -150,6 +151,7 @@ src/
 | POST | /api/sessions/:id/meetings/:mid/outcome | Save meeting outcome |
 | POST | /api/sessions/:id/meetings/:mid/end | End active meeting |
 | POST | /api/sessions/:id/meetings/:mid/materialize | Materialize canvas data into workspace files |
+| POST | /api/sessions/:id/meetings/start | Start kid-initiated meeting (create invite + auto-accept) |
 | POST | /v1/agents | Provision new agent (returns agent_id, api_key, runtime_url) |
 | PUT | /v1/agents/:id | Update agent config (x-api-key auth) |
 | DELETE | /v1/agents/:id | Deprovision agent (x-api-key auth) |

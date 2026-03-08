@@ -232,7 +232,7 @@ Agents are either **always-on defaults** (fire without blocks) or **opt-in** (re
 | Bug Detective | convergence_stalled |
 | Pixel (design review) | task_starting + design keywords |
 
-Opt-in agents: Marketing, Styler, Pixel (art/theme), Interface Designer, and kid-defined custom agents.
+Opt-in agents: Marketing, Social Media, Styler, Pixel (art/theme), Interface Designer, and kid-defined custom agents.
 
 ### Meeting Type Registry
 
