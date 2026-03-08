@@ -214,6 +214,7 @@ export class Orchestrator {
         narratorService: this.narratorService,
         permissionPolicy: this.permissionPolicy,
         deviceRegistry: this.deviceRegistry,
+        testRunner: this.testRunner,
         feedbackLoopTracker,
         meetingTriggerWiring: this.meetingTriggerWiring,
         meetingService: this.meetingService,

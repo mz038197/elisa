@@ -19,6 +19,7 @@ import { PortalService } from '../portalService.js';
 import { NarratorService } from '../narratorService.js';
 import { PermissionPolicy } from '../permissionPolicy.js';
 import type { DeviceRegistry } from '../deviceRegistry.js';
+import type { TestRunner } from '../testRunner.js';
 import type { FeedbackLoopTracker } from '../feedbackLoopTracker.js';
 import { ContextManager } from '../../utils/contextManager.js';
 import { TokenTracker, DEFAULT_RESERVED_PER_TASK } from '../../utils/tokenTracker.js';
@@ -60,6 +61,7 @@ export interface ExecuteDeps {
   narratorService?: NarratorService;
   permissionPolicy?: PermissionPolicy;
   deviceRegistry?: DeviceRegistry;
+  testRunner?: TestRunner;
   feedbackLoopTracker?: FeedbackLoopTracker;
   meetingTriggerWiring?: MeetingTriggerWiring;
   meetingService?: MeetingService;
@@ -90,6 +92,7 @@ export class ExecutePhase {
       permissionPolicy: deps.permissionPolicy,
       feedbackLoopTracker: deps.feedbackLoopTracker,
       deviceRegistry: deps.deviceRegistry,
+      testRunner: deps.testRunner,
     });
     this.deviceFileValidator = deps.deviceFileValidator ?? (
       deps.deviceRegistry

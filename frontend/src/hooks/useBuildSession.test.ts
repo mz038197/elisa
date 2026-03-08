@@ -635,14 +635,16 @@ describe('useBuildSession', () => {
           type: 'test_result', test_name: 'test_real', passed: true, details: 'PASSED',
         });
       });
-      // test_result clears pending stubs, adds real result
-      expect(result.current.testResults).toHaveLength(1);
-      expect(result.current.testResults[0].test_name).toBe('test_real');
+      // test_result appends new test but keeps pending stubs (find-and-update by name)
+      expect(result.current.testResults).toHaveLength(2);
+      expect(result.current.testResults[0].test_name).toBe('test_stub');
+      expect(result.current.testResults[0].status).toBe('pending');
+      expect(result.current.testResults[1].test_name).toBe('test_real');
 
       act(() => {
         result.current.handleEvent({ type: 'test_phase_complete', passed: 1, failed: 0, total: 1 });
       });
-      // No pending stubs remain, real result preserved
+      // test_phase_complete removes remaining pending stubs, real result preserved
       expect(result.current.testResults).toHaveLength(1);
       expect(result.current.testResults[0].status).toBe('passed');
     });

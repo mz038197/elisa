@@ -30,7 +30,7 @@ export type WSEvent =
   | { type: 'deploy_checklist'; rules: Array<{ name: string; prompt: string }> }
   | { type: 'teaching_moment'; concept: string; headline: string; explanation: string; tell_me_more?: string; related_concepts?: string[] }
   | { type: 'commit_created'; sha: string; message: string; agent_name: string; task_id: string; timestamp: string; files_changed: string[] }
-  | { type: 'test_result'; test_name: string; passed: boolean; details: string }
+  | { type: 'test_result'; test_name: string; passed: boolean; details: string; task_id?: string }
   | { type: 'coverage_update'; percentage: number; details?: Record<string, { statements: number; covered: number; percentage: number }> }
   | { type: 'token_usage'; agent_name: string; input_tokens: number; output_tokens: number; cost_usd: number }
   | { type: 'budget_warning'; total_tokens: number; max_budget: number; cost_usd: number }

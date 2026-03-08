@@ -417,22 +417,17 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         passed: event.passed,
         details: event.details,
         status: event.passed ? 'passed' : 'failed',
+        task_id: event.task_id,
       };
-      // When real test results arrive, clear all pending stubs (they were placeholders)
-      // and build from real results only
-      const withoutPending = state.testResults.filter(t => t.status !== 'pending');
-      // Check if this test already exists (avoid duplicates)
-      const existingIndex = withoutPending.findIndex(t => t.test_name === event.test_name);
-      if (existingIndex >= 0) {
-        const updated = [...withoutPending];
-        updated[existingIndex] = newResult;
+      // Find existing test by name and update in place (pending->failed, failed->passed)
+      const existingIdx = state.testResults.findIndex(t => t.test_name === event.test_name);
+      if (existingIdx >= 0) {
+        const updated = [...state.testResults];
+        updated[existingIdx] = newResult;
         return { ...state, events, testResults: updated };
       }
-      return {
-        ...state,
-        events,
-        testResults: [...withoutPending, newResult],
-      };
+      // New test not seen before -- append
+      return { ...state, events, testResults: [...state.testResults, newResult] };
     }
 
     case 'test_phase_complete': {
