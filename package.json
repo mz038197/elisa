@@ -71,6 +71,7 @@
     "electron-store": "^10.0.1"
   },
   "overrides": {
-    "minimatch": ">=10.2.1"
+    "minimatch": ">=10.2.1",
+    "tar": ">=7.5.10"
   }
 }
