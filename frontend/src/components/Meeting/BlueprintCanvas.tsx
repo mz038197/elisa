@@ -1,6 +1,6 @@
 /** Blueprint canvas -- interactive architecture explorer for end-of-build summary. */
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { registerCanvas, type CanvasProps } from './canvasRegistry';
 
 interface TaskSummary {
@@ -81,18 +81,18 @@ function BlueprintCanvas({ canvasState }: CanvasProps) {
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
   // Match tests to selected task by checking if the test name contains a word from the task name
-  const matchedTests = useMemo(() => {
+  const matchedTests = (() => {
     if (!selectedTask) return [];
     const keywords = selectedTask.name
       .toLowerCase()
       .split(/\s+/)
-      .filter((w) => w.length > 2);
+      .filter((w: string) => w.length > 2);
     if (keywords.length === 0) return tests;
-    return tests.filter((test) => {
+    return tests.filter((test: { name: string }) => {
       const lower = test.name.toLowerCase();
-      return keywords.some((kw) => lower.includes(kw));
+      return keywords.some((kw: string) => lower.includes(kw));
     });
-  }, [selectedTask, tests]);
+  })();
 
   return (
     <div className="flex flex-col h-full" data-testid="blueprint-canvas">
