@@ -102,6 +102,7 @@ export interface BuildSessionContextValue {
   clearQuestionRequest: () => void;
   clearErrorNotification: () => void;
   resetToDesign: () => void;
+  launchWorkspace: (workspacePath?: string) => Promise<void>;
 }
 
 const BuildSessionContext = createContext<BuildSessionContextValue | null>(null);

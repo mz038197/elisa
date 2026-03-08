@@ -14,6 +14,8 @@ export interface SessionEntry {
   createdAt: number;
   /** True when user chose a workspace directory (skip auto-cleanup of files). */
   userWorkspace: boolean;
+  /** Process spawned by the launch endpoint (standalone serve without rebuild). */
+  launchProcess: import('node:child_process').ChildProcess | null;
 }
 
 export class SessionStore {
@@ -37,6 +39,7 @@ export class SessionStore {
       cancelFn: null,
       createdAt: Date.now(),
       userWorkspace: false,
+      launchProcess: null,
     };
     this.entries.set(id, entry);
     this.checkpoint(id);
@@ -84,6 +87,7 @@ export class SessionStore {
           cancelFn: null,
           createdAt: new Date(p.savedAt).getTime(),
           userWorkspace: false,
+          launchProcess: null,
         };
         // Mark recovered sessions as done since orchestrators can't be restored
         if (entry.session.state !== 'idle' && entry.session.state !== 'done') {
@@ -106,6 +110,10 @@ export class SessionStore {
 
     const timer = setTimeout(() => {
       const entry = this.entries.get(id);
+      if (entry?.launchProcess) {
+        try { entry.launchProcess.kill(); } catch { /* ignore */ }
+        entry.launchProcess = null;
+      }
       if (entry?.orchestrator && !entry.userWorkspace) {
         entry.orchestrator.cleanup();
       }

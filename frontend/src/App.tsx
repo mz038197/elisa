@@ -114,6 +114,7 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
     uiState, tasks, agents, events, sessionId,
     teachingMoments, deployUrls, errorNotification, testResults,
     nuggetDir, startBuild, stopBuild, clearErrorNotification, resetToDesign,
+    launchWorkspace,
   } = useBuildSessionContext();
 
   const {
@@ -233,6 +234,33 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
     await startBuild(spec, waitForOpen, wp, workspaceJson ?? undefined);
   };
 
+  const [launching, setLaunching] = useState(false);
+  const handleLaunch = async () => {
+    if (!workspacePath) return;
+    setLaunching(true);
+    try {
+      if (sessionId) {
+        // Reuse existing session
+        await launchWorkspace(workspacePath);
+      } else {
+        // Create a temporary session just for launching
+        const res = await authFetch('/api/sessions', { method: 'POST' });
+        if (!res.ok) return;
+        const { session_id } = await res.json();
+        const launchRes = await authFetch(`/api/sessions/${session_id}/launch`, {
+          method: 'POST',
+          body: JSON.stringify({ workspace_path: workspacePath }),
+        });
+        if (launchRes.ok) {
+          const { url } = await launchRes.json();
+          window.open(url, '_blank');
+        }
+      }
+    } finally {
+      setLaunching(false);
+    }
+  };
+
   const handleBoardDismiss = useCallback(() => {
     if (boardInfo) boardDismissedPortsRef.current.add(boardInfo.port);
     setBoardDetectedModalOpen(false);
@@ -258,6 +286,15 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
         </div>
         <div className="flex items-center gap-3">
           {spec && <LevelBadge level={systemLevel} />}
+          {uiState === 'design' && workspacePath && (
+            <button
+              onClick={handleLaunch}
+              disabled={launching}
+              className="px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer border border-accent-sky/30 bg-accent-sky/10 text-accent-sky hover:bg-accent-sky/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {launching ? 'Launching...' : 'Launch'}
+            </button>
+          )}
           <GoButton
             disabled={uiState !== 'design' || !spec?.nugget.goal || health.status !== 'ready'}
             onClick={handleGo}
@@ -454,6 +491,14 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
                   {Object.keys(deployUrls).length > 1 ? `Open ${target}` : 'Open in Browser'}
                 </a>
               ))}
+              {(nuggetDir || workspacePath) && (
+                <button
+                  onClick={() => launchWorkspace(nuggetDir || workspacePath || undefined)}
+                  className="w-full px-6 py-2.5 rounded-xl text-sm cursor-pointer border border-accent-sky/30 bg-accent-sky/10 text-accent-sky hover:bg-accent-sky/20 transition-colors"
+                >
+                  {Object.keys(deployUrls).length > 0 ? 'Relaunch Preview' : 'Launch Preview'}
+                </button>
+              )}
               <button
                 onClick={() => {
                   if (sessionId) {
