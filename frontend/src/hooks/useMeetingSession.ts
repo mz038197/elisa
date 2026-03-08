@@ -4,6 +4,7 @@ import { useReducer, useCallback, useMemo } from 'react';
 import type { WSEvent } from '../types';
 import type { MeetingInvite } from '../components/shared/MeetingInviteToast';
 import { authFetch } from '../lib/apiClient';
+import { playMeetingChime } from '../lib/playChime';
 
 // -- State --
 
@@ -166,6 +167,7 @@ export function useMeetingSession(sessionId: string | null) {
   const handleMeetingEvent = useCallback((event: WSEvent): boolean => {
     switch (event.type) {
       case 'meeting_invite':
+        playMeetingChime();
         dispatch({
           type: 'MEETING_INVITE',
           meetingId: event.meetingId,
