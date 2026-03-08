@@ -1684,6 +1684,81 @@ describe('blockInterpreter', () => {
       expect(spec.meeting_team).toBeUndefined();
     });
 
+    it('interprets team_member_custom with campaign canvas type', () => {
+      const ws = makeWorkspace([
+        chainBlocks(
+          goalBlock('My app'),
+          {
+            type: 'team_member_custom',
+            fields: { AGENT_NAME: 'Promo', AGENT_PERSONA: 'creates campaigns', CANVAS_TYPE: 'campaign' },
+          },
+        ),
+      ]);
+      const spec = interpretWorkspace(ws as any);
+      expect(spec.meeting_team).toHaveLength(1);
+      expect(spec.meeting_team![0]).toEqual({
+        type: 'custom',
+        name: 'Promo',
+        persona: 'creates campaigns',
+        canvasType: 'campaign',
+      });
+    });
+
+    it('interprets team_member_custom with design-preview canvas type', () => {
+      const ws = makeWorkspace([
+        chainBlocks(
+          goalBlock('My app'),
+          {
+            type: 'team_member_custom',
+            fields: { AGENT_NAME: 'Artist', AGENT_PERSONA: 'previews designs', CANVAS_TYPE: 'design-preview' },
+          },
+        ),
+      ]);
+      const spec = interpretWorkspace(ws as any);
+      expect(spec.meeting_team).toHaveLength(1);
+      expect(spec.meeting_team![0]).toEqual({
+        type: 'custom',
+        name: 'Artist',
+        persona: 'previews designs',
+        canvasType: 'design-preview',
+      });
+    });
+
+    it('interprets team_member_custom with launch-pad canvas type', () => {
+      const ws = makeWorkspace([
+        chainBlocks(
+          goalBlock('My app'),
+          {
+            type: 'team_member_custom',
+            fields: { AGENT_NAME: 'Launcher', AGENT_PERSONA: 'builds launch pages', CANVAS_TYPE: 'launch-pad' },
+          },
+        ),
+      ]);
+      const spec = interpretWorkspace(ws as any);
+      expect(spec.meeting_team).toHaveLength(1);
+      expect(spec.meeting_team![0]).toEqual({
+        type: 'custom',
+        name: 'Launcher',
+        persona: 'builds launch pages',
+        canvasType: 'launch-pad',
+      });
+    });
+
+    it('defaults canvas type to explain-it when CANVAS_TYPE field is missing', () => {
+      const ws = makeWorkspace([
+        chainBlocks(
+          goalBlock('My app'),
+          {
+            type: 'team_member_custom',
+            fields: { AGENT_NAME: 'Helper', AGENT_PERSONA: 'explains things' },
+          },
+        ),
+      ]);
+      const spec = interpretWorkspace(ws as any);
+      expect(spec.meeting_team).toHaveLength(1);
+      expect(spec.meeting_team![0].canvasType).toBe('explain-it');
+    });
+
     it('skips team_member_custom with empty AGENT_NAME', () => {
       const ws = makeWorkspace([
         chainBlocks(

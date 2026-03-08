@@ -222,6 +222,64 @@ describe('POST /api/sessions/:sessionId/meetings/:meetingId/message', () => {
   });
 });
 
+describe('POST /api/sessions/:sessionId/meetings/start', () => {
+  it('creates meeting and immediately accepts it, returns meetingId', async () => {
+    const sessionId = createSession();
+    const { status, body } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/start`,
+      { method: 'POST', body: JSON.stringify({ meetingTypeId: 'test-meeting' }) },
+    );
+    expect(status).toBe(200);
+    expect(body.meetingId).toBeDefined();
+
+    // Verify the meeting is now active (accepted, not just invited)
+    const meeting = meetingService.getMeeting(body.meetingId);
+    expect(meeting).toBeDefined();
+    expect(meeting!.status).toBe('active');
+  });
+
+  it('returns 400 for missing meetingTypeId', async () => {
+    const sessionId = createSession();
+    const { status, body } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/start`,
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+    expect(status).toBe(400);
+    expect(body.detail).toBe('meetingTypeId required');
+  });
+
+  it('returns 404 for unknown session', async () => {
+    const { status } = await fetchJSON(
+      `/api/sessions/nonexistent/meetings/start`,
+      { method: 'POST', body: JSON.stringify({ meetingTypeId: 'test-meeting' }) },
+    );
+    expect(status).toBe(404);
+  });
+
+  it('returns 400 for unknown meeting type', async () => {
+    const sessionId = createSession();
+    const { status, body } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/start`,
+      { method: 'POST', body: JSON.stringify({ meetingTypeId: 'nonexistent-type' }) },
+    );
+    expect(status).toBe(400);
+    expect(body.detail).toContain('Unknown meeting type');
+  });
+
+  it('emits meeting_started event via sendEvent', async () => {
+    const sessionId = createSession();
+    sentEvents = [];
+    const { status } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/start`,
+      { method: 'POST', body: JSON.stringify({ meetingTypeId: 'test-meeting' }) },
+    );
+    expect(status).toBe(200);
+
+    const startedEvents = sentEvents.filter(e => e.type === 'meeting_started');
+    expect(startedEvents.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe('POST /api/sessions/:sessionId/meetings/:meetingId/end', () => {
   it('ends an active meeting', async () => {
     const sessionId = createSession();
