@@ -129,6 +129,61 @@ describe('MeetingTriggerWiring team filtering', () => {
     expect(meetingIds.length).toBeGreaterThan(0);
   });
 
+  it('custom agent fires when dynamically registered and spec has matching meetingTypeId', async () => {
+    // Simulate the orchestrator flow: registerDynamic + backfill meetingTypeId on spec
+    const dynamicIds = registry.registerDynamic(sessionId, [
+      { name: 'Coach', persona: 'Gives tips', canvasType: 'explain-it' },
+    ]);
+    expect(dynamicIds).toHaveLength(1);
+    const customId = dynamicIds[0]; // e.g. 'custom-test-session-0'
+
+    const spec: NuggetSpec = {
+      nugget: { goal: 'test' },
+      meeting_team: [{ type: 'custom', meetingTypeId: customId }],
+    };
+    wiring.setSpec(sessionId, spec);
+
+    // explain-it trigger fires at 40%+ completion: ceil(4 * 0.4) = 2
+    await wiring.evaluateAndInvite(
+      'task_completed',
+      { tasks_done: 2, tasks_total: 4 },
+      sessionId, send, 'explorer',
+    );
+
+    const inviteCalls = send.mock.calls.filter(
+      (c: unknown[]) => (c[0] as { type: string }).type === 'meeting_invite',
+    );
+    const invitedIds = inviteCalls.map((c: unknown[]) => (c[0] as { meetingTypeId: string }).meetingTypeId);
+    expect(invitedIds).toContain(customId);
+  });
+
+  it('custom agent does NOT fire when meetingTypeId is missing from spec', async () => {
+    // Register dynamic agent but don't backfill meetingTypeId on the spec
+    registry.registerDynamic(sessionId, [
+      { name: 'Coach', persona: 'Gives tips', canvasType: 'explain-it' },
+    ]);
+
+    const spec: NuggetSpec = {
+      nugget: { goal: 'test' },
+      meeting_team: [{ type: 'custom', name: 'Coach' }], // no meetingTypeId
+    };
+    wiring.setSpec(sessionId, spec);
+
+    // explain-it trigger fires at 40%+ completion
+    await wiring.evaluateAndInvite(
+      'task_completed',
+      { tasks_done: 2, tasks_total: 4 },
+      sessionId, send, 'explorer',
+    );
+
+    const inviteCalls = send.mock.calls.filter(
+      (c: unknown[]) => (c[0] as { type: string }).type === 'meeting_invite',
+    );
+    const invitedIds = inviteCalls.map((c: unknown[]) => (c[0] as { meetingTypeId: string }).meetingTypeId);
+    // Only always-on agents should fire, not the custom one
+    expect(invitedIds).not.toContain('custom-test-session-0');
+  });
+
   it('clearSession removes spec and dedup state', async () => {
     const spec: NuggetSpec = {
       nugget: { goal: 'test' },

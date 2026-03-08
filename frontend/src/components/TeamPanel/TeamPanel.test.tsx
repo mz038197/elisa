@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import TeamMemberList from './TeamMemberList';
 
 describe('TeamMemberList', () => {
@@ -46,6 +46,28 @@ describe('TeamMemberList', () => {
       />,
     );
     expect(screen.queryByText('Chat')).not.toBeInTheDocument();
+  });
+
+  it('calls onAcceptInvite with meetingId when Chat is clicked', () => {
+    const onAcceptInvite = vi.fn();
+    const invite = {
+      meetingId: 'inv-1',
+      meetingTypeId: 'buddy-agent',
+      agentName: 'Buddy',
+      title: 'Check-in',
+      description: 'Buddy wants to chat',
+    };
+
+    render(
+      <TeamMemberList
+        inviteQueue={[invite]}
+        onAcceptInvite={onAcceptInvite}
+        onDeclineInvite={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('Chat'));
+    expect(onAcceptInvite).toHaveBeenCalledWith('inv-1');
   });
 
   it('renders custom agents from invite queue that are not in builtin list', () => {
