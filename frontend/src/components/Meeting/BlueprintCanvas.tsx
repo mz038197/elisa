@@ -1,6 +1,6 @@
-/** Blueprint canvas -- system overview walkthrough for Architecture Agent meetings. */
+/** Blueprint canvas -- interactive architecture explorer for end-of-build summary. */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { registerCanvas, type CanvasProps } from './canvasRegistry';
 
 interface TaskSummary {
@@ -8,6 +8,7 @@ interface TaskSummary {
   name: string;
   agent: string;
   status: 'pending' | 'running' | 'done' | 'failed';
+  description?: string;
   acceptance_criteria?: string;
 }
 
@@ -30,11 +31,12 @@ function parseTasks(data: Record<string, unknown>): TaskSummary[] {
     const task = t as Record<string, unknown>;
     return {
       id: String(task.id ?? ''),
-      name: String(task.name ?? ''),
+      name: String(task.name ?? task.title ?? ''),
       agent: String(task.agent ?? ''),
       status: (['pending', 'running', 'done', 'failed'].includes(String(task.status))
         ? String(task.status)
         : 'pending') as TaskSummary['status'],
+      description: task.description ? String(task.description) : undefined,
       acceptance_criteria: task.acceptance_criteria ? String(task.acceptance_criteria) : undefined,
     };
   });
@@ -62,16 +64,11 @@ function parseStats(data: Record<string, unknown>): SystemStats | null {
   };
 }
 
-const STATUS_COLORS: Record<TaskSummary['status'], string> = {
-  pending: 'bg-gray-500/20 text-gray-400',
-  running: 'bg-blue-500/20 text-blue-400',
-  done: 'bg-green-500/20 text-green-400',
-  failed: 'bg-red-500/20 text-red-400',
-};
-
-const TEST_RESULT_STYLES = {
-  passed: { dot: 'bg-green-400', label: 'Passed' },
-  failed: { dot: 'bg-red-400', label: 'Failed' },
+const STATUS_BADGE: Record<TaskSummary['status'], { bg: string; label: string }> = {
+  done: { bg: 'bg-green-500/20 text-green-400', label: 'done' },
+  running: { bg: 'bg-blue-500/20 text-blue-400', label: 'in progress' },
+  failed: { bg: 'bg-red-500/20 text-red-400', label: 'failed' },
+  pending: { bg: 'bg-gray-500/20 text-gray-400', label: 'pending' },
 };
 
 function BlueprintCanvas({ canvasState }: CanvasProps) {
@@ -83,129 +80,164 @@ function BlueprintCanvas({ canvasState }: CanvasProps) {
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId);
 
+  // Match tests to selected task by checking if the test name contains a word from the task name
+  const matchedTests = useMemo(() => {
+    if (!selectedTask) return [];
+    const keywords = selectedTask.name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+    if (keywords.length === 0) return tests;
+    return tests.filter((test) => {
+      const lower = test.name.toLowerCase();
+      return keywords.some((kw) => lower.includes(kw));
+    });
+  }, [selectedTask, tests]);
+
   return (
     <div className="flex flex-col h-full" data-testid="blueprint-canvas">
+      {/* Header */}
       <div className="mb-4">
         <h3 className="text-lg font-display font-bold text-atelier-text">
-          System Blueprint
+          Build Explorer
         </h3>
         <p className="text-sm text-atelier-text-secondary mt-1">
-          Here's how your project was built. Click a task to learn more!
+          Here's how your project was built. Click a task to explore!
         </p>
       </div>
 
-      {/* System Stats */}
+      {/* Stats bar */}
       {stats && (
         <div className="grid grid-cols-3 gap-3 mb-4" data-testid="system-stats">
-          <div className="rounded-xl bg-atelier-surface p-3 border border-border-subtle text-center">
+          <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-3 border border-border-subtle text-center">
             <p className="text-2xl font-bold text-atelier-text">{stats.tasks_done}/{stats.total_tasks}</p>
             <p className="text-xs text-atelier-text-secondary">Tasks Done</p>
           </div>
-          <div className="rounded-xl bg-atelier-surface p-3 border border-border-subtle text-center">
+          <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-3 border border-border-subtle text-center">
             <p className="text-2xl font-bold text-atelier-text">{stats.tests_passing}/{stats.tests_total}</p>
             <p className="text-xs text-atelier-text-secondary">Tests Passing</p>
           </div>
-          <div className="rounded-xl bg-atelier-surface p-3 border border-border-subtle text-center">
+          <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-3 border border-border-subtle text-center">
             <p className="text-2xl font-bold text-atelier-text">{stats.health_score}</p>
             <p className="text-xs text-atelier-text-secondary">Health Score</p>
           </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Tasks list */}
-          <div>
-            <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-2">
-              Tasks
-            </p>
+      {/* Two-panel layout */}
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* Left panel: scrollable task list */}
+        <div className="w-1/2 flex flex-col min-h-0">
+          <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-2">
+            Tasks
+          </p>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {tasks.length > 0 ? (
-              <div className="space-y-2">
-                {tasks.map((task) => (
+              tasks.map((task) => {
+                const badge = STATUS_BADGE[task.status];
+                const isSelected = selectedTaskId === task.id;
+                return (
                   <button
                     key={task.id}
                     type="button"
-                    onClick={() => setSelectedTaskId(task.id === selectedTaskId ? null : task.id)}
+                    onClick={() => setSelectedTaskId(isSelected ? null : task.id)}
                     className={`w-full text-left rounded-xl p-3 border transition-all cursor-pointer ${
-                      selectedTaskId === task.id
+                      isSelected
                         ? 'border-accent-sky bg-accent-sky/10'
-                        : 'border-border-subtle bg-atelier-surface hover:bg-atelier-surface/70'
+                        : 'border-border-subtle bg-atelier-surface/60 backdrop-blur-sm hover:bg-atelier-surface/80'
                     }`}
                     aria-label={`View task: ${task.name}`}
-                    aria-pressed={selectedTaskId === task.id}
+                    aria-pressed={isSelected}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium text-atelier-text truncate">{task.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[task.status]}`}>
-                        {task.status}
+                      <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${badge.bg}`}>
+                        {badge.label}
                       </span>
                     </div>
                     <p className="text-xs text-atelier-text-muted mt-1">{task.agent}</p>
                   </button>
-                ))}
-              </div>
+                );
+              })
             ) : (
-              <div className="rounded-xl bg-atelier-surface p-4 border border-border-subtle text-center">
+              <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-4 border border-border-subtle text-center">
                 <p className="text-sm text-atelier-text-muted">
                   Waiting for Blueprint to share the task overview...
                 </p>
               </div>
             )}
           </div>
+        </div>
 
-          {/* Tests + selected task detail */}
-          <div className="space-y-4">
-            {/* Selected task detail */}
-            {selectedTask && (
-              <div className="rounded-xl bg-accent-sky/5 p-3 border border-accent-sky/20" data-testid="task-detail">
-                <p className="text-xs font-semibold text-accent-sky uppercase tracking-wide mb-1">
-                  Task Detail
-                </p>
-                <p className="text-sm font-medium text-atelier-text">{selectedTask.name}</p>
-                <p className="text-xs text-atelier-text-secondary mt-1">
-                  Agent: {selectedTask.agent}
-                </p>
-                {selectedTask.acceptance_criteria && (
-                  <div className="mt-2">
-                    <p className="text-xs text-atelier-text-secondary">Acceptance Criteria:</p>
-                    <p className="text-sm text-atelier-text mt-1">{selectedTask.acceptance_criteria}</p>
+        {/* Right panel: task detail */}
+        <div className="w-1/2 flex flex-col min-h-0">
+          {selectedTask ? (
+            <div className="flex-1 overflow-y-auto" data-testid="task-detail">
+              <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-4 border border-border-subtle space-y-4">
+                {/* Task header */}
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h4 className="text-sm font-bold text-atelier-text">{selectedTask.name}</h4>
+                    <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_BADGE[selectedTask.status].bg}`}>
+                      {STATUS_BADGE[selectedTask.status].label}
+                    </span>
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Tests Written */}
-            <div>
-              <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-2">
-                Tests Written
-              </p>
-              {tests.length > 0 ? (
-                <div className="space-y-2">
-                  {tests.map((test, idx) => {
-                    const style = test.passed ? TEST_RESULT_STYLES.passed : TEST_RESULT_STYLES.failed;
-                    return (
-                      <div
-                        key={idx}
-                        className="flex items-start gap-2 rounded-xl bg-atelier-surface p-3 border border-border-subtle"
-                      >
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${style.dot}`}
-                          aria-label={`Test: ${style.label}`}
-                        />
-                        <p className="text-sm text-atelier-text">{test.name}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="rounded-xl bg-atelier-surface p-4 border border-border-subtle text-center">
-                  <p className="text-sm text-atelier-text-muted">
-                    No test data yet.
+                  <p className="text-xs text-atelier-text-secondary">
+                    Agent: {selectedTask.agent}
                   </p>
                 </div>
-              )}
+
+                {/* Description */}
+                {selectedTask.description && (
+                  <div>
+                    <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-1">Description</p>
+                    <p className="text-sm text-atelier-text">{selectedTask.description}</p>
+                  </div>
+                )}
+
+                {/* Acceptance criteria */}
+                {selectedTask.acceptance_criteria && (
+                  <div>
+                    <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-1">Acceptance Criteria</p>
+                    <p className="text-sm text-atelier-text">{selectedTask.acceptance_criteria}</p>
+                  </div>
+                )}
+
+                {/* Related tests */}
+                <div>
+                  <p className="text-xs font-semibold text-atelier-text-secondary uppercase tracking-wide mb-2">
+                    Related Tests
+                  </p>
+                  {matchedTests.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {matchedTests.map((test, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 rounded-lg bg-atelier-surface/40 p-2 border border-border-subtle"
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${test.passed ? 'bg-green-400' : 'bg-red-400'}`}
+                            aria-label={test.passed ? 'Test: Passed' : 'Test: Failed'}
+                          />
+                          <p className="text-xs text-atelier-text truncate">{test.name}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-atelier-text-muted">No matching tests found.</p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="rounded-xl bg-atelier-surface/60 backdrop-blur-sm p-6 border border-border-subtle text-center" data-testid="empty-detail">
+                <p className="text-sm text-atelier-text-muted">
+                  Click a task to explore how it was built
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
