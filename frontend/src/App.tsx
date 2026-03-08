@@ -117,7 +117,7 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
   const {
     inviteQueue, nextInvite, activeMeeting, isAgentThinking,
     messages: meetingMessages, canvasState: meetingCanvasState,
-    handleMeetingEvent, acceptInvite, declineInvite, dismissToast,
+    handleMeetingEvent, acceptInvite, declineInvite, dismissToast, startDirectMeeting,
     sendMessage: sendMeetingMessage, endMeeting, updateCanvas: updateMeetingCanvas,
     materializeArtifacts: materializeMeetingArtifacts,
     resetMeetings,
@@ -367,7 +367,7 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
         </div>
       )}
 
-      {/* Done mode overlay -- hidden when Team tab active or meeting modal open */}
+      {/* Done mode overlay -- hidden when meeting modal open or Team tab active */}
       {uiState === 'done' && !activeMeeting && activeMainTab !== 'team' && (
         <div className="fixed inset-0 modal-backdrop z-40 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="done-modal-title">
           <div className={`glass-elevated rounded-2xl shadow-2xl p-8 mx-4 text-center animate-float-in ${inviteQueue.length > 0 ? 'max-w-lg' : 'max-w-md'}`}>
@@ -391,22 +391,38 @@ function AppShell({ blockCanvasRef, authReady, handleBuildEvent }: AppShellProps
             {(tasks.some(t => t.status === 'failed') || testResults.some(t => !t.passed)) && (
               <div className="mb-4">
                 <button
-                  onClick={() => setActiveMainTab('team')}
+                  onClick={() => startDirectMeeting('debug-convergence')}
                   className="w-full px-4 py-3 rounded-xl text-sm cursor-pointer font-medium border border-red-500/30 bg-red-950/30 text-red-400 hover:bg-red-950/50 transition-colors text-center"
                 >
                   Fix It -- Debug with Bug Detective
                 </button>
               </div>
             )}
-            {/* Team summary button when invites are pending */}
-            {inviteQueue.length > 0 && (
+            {/* Report a Bug button -- always available post-build */}
+            {!tasks.some(t => t.status === 'failed') && !testResults.some(t => !t.passed) && (
               <div className="mb-4">
                 <button
-                  onClick={() => setActiveMainTab('team')}
-                  className="w-full px-4 py-3 rounded-xl text-sm cursor-pointer border border-accent-sky/30 bg-accent-sky/10 text-accent-sky hover:bg-accent-sky/20 transition-colors text-center"
+                  onClick={() => startDirectMeeting('debug-convergence')}
+                  className="w-full px-4 py-3 rounded-xl text-sm cursor-pointer border border-amber-500/30 bg-amber-950/20 text-amber-400 hover:bg-amber-950/40 transition-colors text-center"
                 >
-                  Your team wants to chat ({inviteQueue.length} pending)
+                  Report a Bug
                 </button>
+              </div>
+            )}
+            {/* Pending meeting invites -- accept directly (opens modal overlay) */}
+            {inviteQueue.length > 0 && (
+              <div className="mb-4 space-y-2">
+                <p className="text-xs font-semibold text-accent-sky">Your team wants to chat:</p>
+                {inviteQueue.map(invite => (
+                  <button
+                    key={invite.meetingId}
+                    onClick={() => acceptInvite(invite.meetingId)}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm cursor-pointer border border-accent-sky/30 bg-accent-sky/10 text-accent-sky hover:bg-accent-sky/20 transition-colors text-left flex items-center gap-2"
+                  >
+                    <span className="font-medium">{invite.agentName}</span>
+                    <span className="text-accent-sky/60 text-xs truncate">{invite.title}</span>
+                  </button>
+                ))}
               </div>
             )}
             <div className="flex flex-col items-center gap-2">
