@@ -1338,4 +1338,61 @@ describe('useBuildSession', () => {
       expect(result.current.agents[1].status).toBe('error');
     });
   });
+
+  // ---- Meeting blocking events (#199) ----
+
+  describe('meeting_blocking_task / meeting_unblocking_task', () => {
+    it('adds task ID to meetingBlockedTasks on meeting_blocking_task', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual(['t1']);
+    });
+
+    it('removes task ID from meetingBlockedTasks on meeting_unblocking_task', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+        result.current.handleEvent({ type: 'meeting_unblocking_task', task_id: 't1' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual([]);
+    });
+
+    it('does not duplicate task IDs on repeated blocking events', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual(['t1']);
+    });
+
+    it('handles multiple blocked tasks simultaneously', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't2', meeting_type_id: 'design-task-agent' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual(['t1', 't2']);
+
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_unblocking_task', task_id: 't1' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual(['t2']);
+    });
+
+    it('resets meetingBlockedTasks on RESET_FOR_BUILD', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({ type: 'meeting_blocking_task', task_id: 't1', meeting_type_id: 'design-task-agent' });
+      });
+      expect(result.current.meetingBlockedTasks).toEqual(['t1']);
+
+      act(() => {
+        result.current.resetToDesign();
+      });
+      expect(result.current.meetingBlockedTasks).toEqual([]);
+    });
+  });
 });

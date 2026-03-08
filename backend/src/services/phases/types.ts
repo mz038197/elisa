@@ -77,7 +77,9 @@ export type WSEvent =
   | { type: 'test_expectations'; task_id: string; tests: Array<{ name: string; description: string }> }
   | { type: 'fix_started'; bugReport: string }
   | { type: 'fix_task_completed'; taskId: string; success: boolean }
-  | { type: 'fix_tests_completed'; passed: number; failed: number; total: number };
+  | { type: 'fix_tests_completed'; passed: number; failed: number; total: number }
+  | { type: 'meeting_blocking_task'; task_id: string; meeting_type_id: string }
+  | { type: 'meeting_unblocking_task'; task_id: string };
 
 export type SendEvent = (event: WSEvent) => Promise<void>;
 

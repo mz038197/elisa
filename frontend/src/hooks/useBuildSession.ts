@@ -99,6 +99,7 @@ export interface BuildSessionState {
   healthHistory: HealthHistoryEntry[];
   agentOutputs: Record<string, string[]>;
   isFixing: boolean;
+  meetingBlockedTasks: string[];
 }
 
 const INITIAL_TOKEN_USAGE: TokenUsage = { input: 0, output: 0, total: 0, costUsd: 0, maxBudget: 500_000, perAgent: {} };
@@ -139,6 +140,7 @@ export const initialState: BuildSessionState = {
   healthHistory: [],
   agentOutputs: {},
   isFixing: false,
+  meetingBlockedTasks: [],
 };
 
 // -- Actions --
@@ -745,6 +747,22 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         healthHistory: event.entries,
       };
 
+    case 'meeting_blocking_task':
+      return {
+        ...state,
+        events,
+        meetingBlockedTasks: state.meetingBlockedTasks.includes(event.task_id)
+          ? state.meetingBlockedTasks
+          : [...state.meetingBlockedTasks, event.task_id],
+      };
+
+    case 'meeting_unblocking_task':
+      return {
+        ...state,
+        events,
+        meetingBlockedTasks: state.meetingBlockedTasks.filter(id => id !== event.task_id),
+      };
+
     case 'workspace_created':
       return { ...state, events, nuggetDir: event.nugget_dir };
 
@@ -989,6 +1007,7 @@ export function useBuildSession() {
     healthHistory: state.healthHistory,
     agentOutputs: state.agentOutputs,
     isFixing: state.isFixing,
+    meetingBlockedTasks: state.meetingBlockedTasks,
     handleEvent,
     startBuild,
     stopBuild,

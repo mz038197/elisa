@@ -344,6 +344,9 @@ export class ExecutePhase {
       return;
     }
 
+    // Emit meeting_blocking_task event
+    await ctx.send({ type: 'meeting_blocking_task', task_id: taskId, meeting_type_id: 'design-task-agent' });
+
     // Block for each created meeting until resolved or timed out
     for (const meetingId of meetingIds) {
       await new Promise<void>((resolve) => {
@@ -379,6 +382,8 @@ export class ExecutePhase {
       }
     }
 
+    // Emit meeting_unblocking_task event
+    await ctx.send({ type: 'meeting_unblocking_task', task_id: taskId });
     meetingBlocked.delete(taskId);
   }
 

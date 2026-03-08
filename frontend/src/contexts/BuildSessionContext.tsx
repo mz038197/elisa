@@ -83,6 +83,7 @@ export interface BuildSessionContextValue {
     };
   } | null;
   healthHistory: HealthHistoryEntry[];
+  meetingBlockedTasks: string[];
   boundaryAnalysis: {
     inputs: Array<{ name: string; type: string; source?: string }>;
     outputs: Array<{ name: string; type: string; source?: string }>;

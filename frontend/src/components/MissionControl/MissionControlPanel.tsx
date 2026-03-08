@@ -11,6 +11,7 @@ export default function MissionControlPanel() {
   const {
     tasks, agents, events, narratorMessages,
     uiState, isPlanning, contextFlows, correctionCycles, impactEstimate,
+    meetingBlockedTasks,
   } = useBuildSessionContext();
   const { spec } = useWorkspaceContext();
   const hasContent = tasks.length > 0;
@@ -37,6 +38,7 @@ export default function MissionControlPanel() {
             contextFlows={contextFlows}
             requirements={requirements}
             isComplete={isComplete}
+            meetingBlockedTasks={meetingBlockedTasks}
           />
         ) : isPlanning ? (
           <PlanningIndicator />
