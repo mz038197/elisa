@@ -13,7 +13,7 @@ Delegates to phase handlers in sequence: plan -> meeting triggers (plan_ready) -
 - **promptBuilder.ts** -- Prompt construction for agent tasks. Assembles system prompt (role template, NuggetSpec, skills, digests), predecessor summaries, device plugin context, and MCP server config. Extracted from executePhase.ts for single-responsibility.
 - **taskExecutor.ts** -- Single-task execution pipeline. Owns the retry loop (up to 2 retries), agent execution call (via AgentRunner), post-execution processing (comms file reading, summary validation, git commit, context chain update), token budget pre-check, narrator/teaching calls, human gate logic, and question handler factory. `buildTestExpectations()` parses acceptance criteria into pending test stubs and emits `test_expectations` before agent execution. Extracted from executePhase.ts.
 - **deviceFileValidator.ts** -- Post-build device file validation and fixup. After task execution, validates that required device files exist and conform to expected patterns. Runs a fixup agent to repair missing/malformed files. Extracted from executePhase.ts.
-- **testPhase.ts** -- Test runner invocation, result reporting
+- **testPhase.ts** -- Test runner invocation, result reporting. Emits `test_phase_complete` after all `test_result` events.
 - **deployPhase.ts** -- Web preview (local HTTP server), device flash (via plugin manifests), CLI portal execution
 - **deployOrder.ts** -- Device deploy ordering via provides/requires dependency DAG
 - **types.ts** -- Shared `PhaseContext`, `SendEvent`, `WSEvent` discriminated union, `GateResponse`, `QuestionAnswers` types

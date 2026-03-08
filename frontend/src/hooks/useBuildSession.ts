@@ -159,6 +159,15 @@ export type BuildSessionAction =
 
 // -- Helpers for task updates --
 
+function resolvePendingTests(testResults: TestResult[], reason: string): TestResult[] {
+  if (!testResults.some(t => t.status === 'pending')) return testResults;
+  return testResults.map(t =>
+    t.status === 'pending'
+      ? { ...t, status: 'failed' as const, details: reason }
+      : t,
+  );
+}
+
 function updateTasks(tasks: Task[], taskId: string, status: Task['status']): Task[] {
   return tasks.map(t => t.id === taskId ? { ...t, status } : t);
 }
@@ -368,6 +377,7 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         events,
         uiState: 'done',
         agents: state.agents.map(a => ({ ...a, status: 'done' as const })),
+        testResults: resolvePendingTests(state.testResults, 'No matching test was generated'),
       };
 
     case 'teaching_moment':
@@ -423,6 +433,20 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         events,
         testResults: [...withoutPending, newResult],
       };
+    }
+
+    case 'test_phase_complete': {
+      // Resolve any remaining pending stubs now that real testing is done.
+      // If no real tests ran (total === 0), mark pending stubs as failed.
+      // If some real tests ran, pending stubs are unmatched placeholders -- remove them.
+      const resolved: TestResult[] = event.total === 0
+        ? state.testResults.map(t =>
+            t.status === 'pending'
+              ? { ...t, status: 'failed' as const, details: 'No matching test was generated' }
+              : t,
+          )
+        : state.testResults.filter(t => t.status !== 'pending');
+      return { ...state, events, testResults: resolved };
     }
 
     case 'coverage_update':
@@ -786,7 +810,7 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         events,
         isFixing: false,
         uiState: 'done',
-        testResults: state.testResults.map(t => ({ ...t })),
+        testResults: resolvePendingTests(state.testResults.map(t => ({ ...t })), 'No matching test was generated'),
       };
 
     case 'error': {
@@ -807,6 +831,9 @@ function handleWSEvent(state: BuildSessionState, event: WSEvent, deploySteps: Ar
         tasks: isDeployError
           ? updateTasksMulti(state.tasks, t => t.id.startsWith('__deploy') && t.status === 'in_progress', 'failed')
           : state.tasks,
+        testResults: !event.recoverable
+          ? resolvePendingTests(state.testResults, 'Build ended with error')
+          : state.testResults,
       };
     }
 
@@ -856,6 +883,7 @@ export function buildSessionReducer(state: BuildSessionState, action: BuildSessi
         ...state,
         uiState: 'done',
         agents: state.agents.map(a => ({ ...a, status: 'done' as const })),
+        testResults: resolvePendingTests(state.testResults, 'Build was stopped'),
       };
 
     default:

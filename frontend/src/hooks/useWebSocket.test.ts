@@ -297,4 +297,82 @@ describe('useWebSocket', () => {
     // session_started should still be dispatched
     expect(onEvent).toHaveBeenCalledWith({ type: 'session_started', session_id: 'sess-1' });
   });
+
+  // === Reconnect test data replay ===
+
+  it('reconnect replays test data when testPhaseComplete is true', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        state: 'executing',
+        tasks: [{ id: 't1', name: 'Task', description: '', status: 'done', agent_name: 'Sparky', dependencies: [] }],
+        agents: [{ name: 'Sparky', role: 'builder', persona: '', status: 'done' }],
+        testPhaseComplete: true,
+        individualTestResults: [
+          { test_name: 'test_add', passed: true, details: 'PASSED' },
+          { test_name: 'test_sub', passed: false, details: 'AssertionError' },
+        ],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const onEvent = vi.fn();
+    renderHook(() => useWebSocket({ sessionId: 'sess-1', onEvent }));
+
+    // First open
+    act(() => MockWebSocket.instances[0].simulateOpen());
+
+    // Close and reconnect
+    act(() => MockWebSocket.instances[0].simulateClose());
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    await act(async () => {
+      MockWebSocket.instances[1].simulateOpen();
+      await vi.runAllTimersAsync();
+    });
+
+    // Should replay individual test_result events
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'test_result', test_name: 'test_add', passed: true }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'test_result', test_name: 'test_sub', passed: false }),
+    );
+
+    // Should emit test_phase_complete
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'test_phase_complete', passed: 1, failed: 1, total: 2 }),
+    );
+  });
+
+  it('reconnect emits session_complete when session state is done', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        state: 'done',
+        tasks: [{ id: 't1', name: 'Task', description: '', status: 'done', agent_name: 'Sparky', dependencies: [] }],
+        agents: [{ name: 'Sparky', role: 'builder', persona: '', status: 'done' }],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const onEvent = vi.fn();
+    renderHook(() => useWebSocket({ sessionId: 'sess-1', onEvent }));
+
+    // First open
+    act(() => MockWebSocket.instances[0].simulateOpen());
+
+    // Close and reconnect
+    act(() => MockWebSocket.instances[0].simulateClose());
+    act(() => { vi.advanceTimersByTime(1000); });
+
+    await act(async () => {
+      MockWebSocket.instances[1].simulateOpen();
+      await vi.runAllTimersAsync();
+    });
+
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'session_complete', summary: 'Reconnected -- build already complete' }),
+    );
+  });
 });

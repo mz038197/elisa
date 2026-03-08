@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useBuildSession, MAX_SERIAL_LINES, MAX_EVENTS } from './useBuildSession';
+import { useBuildSession, buildSessionReducer, initialState, MAX_SERIAL_LINES, MAX_EVENTS } from './useBuildSession';
 import type { WSEvent, Task, Agent } from '../types';
 
 // ---- Helpers: reusable event fixtures ----
@@ -598,6 +598,53 @@ describe('useBuildSession', () => {
       });
       expect(result.current.testResults).toHaveLength(2);
       expect(result.current.testResults[1].passed).toBe(false);
+    });
+  });
+
+  // === test_phase_complete ===
+
+  describe('test_phase_complete', () => {
+    it('marks remaining pending stubs as failed when no real tests ran', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_foo', description: 'Foo works' }, { name: 'test_bar', description: 'Bar works' }],
+        });
+      });
+      expect(result.current.testResults).toHaveLength(2);
+      expect(result.current.testResults[0].status).toBe('pending');
+
+      act(() => {
+        result.current.handleEvent({ type: 'test_phase_complete', passed: 0, failed: 0, total: 0 });
+      });
+      expect(result.current.testResults).toHaveLength(2);
+      expect(result.current.testResults[0].status).toBe('failed');
+      expect(result.current.testResults[0].details).toBe('No matching test was generated');
+      expect(result.current.testResults[1].status).toBe('failed');
+    });
+
+    it('removes unmatched pending stubs when real tests did run', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_stub', description: 'stub' }],
+        });
+        result.current.handleEvent({
+          type: 'test_result', test_name: 'test_real', passed: true, details: 'PASSED',
+        });
+      });
+      // test_result clears pending stubs, adds real result
+      expect(result.current.testResults).toHaveLength(1);
+      expect(result.current.testResults[0].test_name).toBe('test_real');
+
+      act(() => {
+        result.current.handleEvent({ type: 'test_phase_complete', passed: 1, failed: 0, total: 1 });
+      });
+      // No pending stubs remain, real result preserved
+      expect(result.current.testResults).toHaveLength(1);
+      expect(result.current.testResults[0].status).toBe('passed');
     });
   });
 
@@ -1393,6 +1440,105 @@ describe('useBuildSession', () => {
         result.current.resetToDesign();
       });
       expect(result.current.meetingBlockedTasks).toEqual([]);
+    });
+  });
+
+  // === Pending test resolution in terminal handlers ===
+
+  describe('pending test resolution', () => {
+    it('session_complete resolves pending stubs as failed', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_a', description: 'A' }, { name: 'test_b', description: 'B' }],
+        });
+      });
+      expect(result.current.testResults.every(t => t.status === 'pending')).toBe(true);
+
+      act(() => {
+        result.current.handleEvent({ type: 'session_complete', summary: 'Done' });
+      });
+      expect(result.current.testResults).toHaveLength(2);
+      expect(result.current.testResults[0].status).toBe('failed');
+      expect(result.current.testResults[0].details).toBe('No matching test was generated');
+      expect(result.current.testResults[1].status).toBe('failed');
+    });
+
+    it('session_complete preserves real results', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_result', test_name: 'test_real', passed: true, details: 'PASSED',
+        });
+      });
+      act(() => {
+        result.current.handleEvent({ type: 'session_complete', summary: 'Done' });
+      });
+      expect(result.current.testResults).toHaveLength(1);
+      expect(result.current.testResults[0].status).toBe('passed');
+      expect(result.current.testResults[0].passed).toBe(true);
+    });
+
+    it('STOP_BUILD resolves pending stubs', () => {
+      // Use reducer directly since stopBuild() requires a sessionId + fetch
+      const stateWithPending = buildSessionReducer(initialState, {
+        type: 'WS_EVENT',
+        event: {
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_stop', description: 'Stopped' }],
+        },
+        deploySteps: [],
+      });
+      expect(stateWithPending.testResults[0].status).toBe('pending');
+
+      const stopped = buildSessionReducer(stateWithPending, { type: 'STOP_BUILD' });
+      expect(stopped.testResults[0].status).toBe('failed');
+      expect(stopped.testResults[0].details).toBe('Build was stopped');
+    });
+
+    it('non-recoverable error resolves pending stubs', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_err', description: 'Error' }],
+        });
+      });
+      act(() => {
+        result.current.handleEvent({ type: 'error', message: 'Fatal crash', recoverable: false });
+      });
+      expect(result.current.testResults[0].status).toBe('failed');
+      expect(result.current.testResults[0].details).toBe('Build ended with error');
+    });
+
+    it('recoverable error does NOT resolve pending stubs', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_warn', description: 'Warning' }],
+        });
+      });
+      act(() => {
+        result.current.handleEvent({ type: 'error', message: 'Temporary issue', recoverable: true });
+      });
+      expect(result.current.testResults[0].status).toBe('pending');
+    });
+
+    it('fix_tests_completed resolves pending stubs', () => {
+      const { result } = renderHook(() => useBuildSession());
+      act(() => {
+        result.current.handleEvent({
+          type: 'test_expectations', task_id: 't1',
+          tests: [{ name: 'test_fix', description: 'Fix' }],
+        });
+      });
+      act(() => {
+        result.current.handleEvent({ type: 'fix_tests_completed', passed: 0, failed: 0, total: 0 });
+      });
+      expect(result.current.testResults[0].status).toBe('failed');
+      expect(result.current.testResults[0].details).toBe('No matching test was generated');
     });
   });
 });

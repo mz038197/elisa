@@ -275,6 +275,8 @@ export class Orchestrator {
 
       // Write test/health results to session for meeting context
       this.session.testResults = { passed: testsPassing, total: testResults.length };
+      this.session.individualTestResults = testResults;
+      this.session.testPhaseComplete = true;
 
       // Health history: load, record current build, emit, persist
       const healthHistory = new HealthHistoryService(this.nuggetDir);
@@ -463,6 +465,8 @@ export class Orchestrator {
     const testResult = await this.testPhase.execute(this.makeContext());
     const results = testResult.testResults;
     this.testResults = results;
+    this.session.individualTestResults = results.tests;
+    this.session.testPhaseComplete = true;
 
     await this.send({
       type: 'fix_tests_completed',

@@ -51,6 +51,8 @@ export interface BuildSession {
   tasks: Task[];
   agents: Agent[];
   testResults?: { passed: number; total: number };
+  individualTestResults?: Array<{ test_name: string; passed: boolean; details: string }>;
+  testPhaseComplete?: boolean;
   healthSummary?: { score: number; grade: string };
 }
 

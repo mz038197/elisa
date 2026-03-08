@@ -60,6 +60,32 @@ export function useWebSocket({ sessionId, onEvent }: UseWebSocketOptions) {
                 deploy_steps: data.deploy_steps,
               });
             }
+            // Replay test results if test phase already completed
+            if (data.testPhaseComplete && data.individualTestResults) {
+              for (const test of data.individualTestResults) {
+                onEventRef.current({
+                  type: 'test_result',
+                  test_name: test.test_name,
+                  passed: test.passed,
+                  details: test.details,
+                });
+              }
+              const results = data.individualTestResults;
+              const passed = results.filter((t: { passed: boolean }) => t.passed).length;
+              onEventRef.current({
+                type: 'test_phase_complete',
+                passed,
+                failed: results.length - passed,
+                total: results.length,
+              });
+            }
+            // If session already done, emit synthetic session_complete
+            if (data.state === 'done') {
+              onEventRef.current({
+                type: 'session_complete',
+                summary: 'Reconnected -- build already complete',
+              });
+            }
           })
           .catch(() => {
             // Silently ignore fetch errors during reconnect sync
