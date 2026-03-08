@@ -351,6 +351,55 @@ describe('meeting auto-end: only considers last agent message', () => {
   });
 });
 
+describe('meeting auto-end: kid-initiated meetings skip auto-end', () => {
+  it('does NOT auto-end a kid-initiated meeting when agent asks closing question and kid says yes', async () => {
+    const sessionId = createSession();
+    const send = async (event: any) => { sentEvents.push(event); };
+
+    // Create meeting via the /start endpoint (kid-initiated)
+    const { status, body } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/start`,
+      { method: 'POST', body: JSON.stringify({ meetingTypeId: 'test-meeting' }) },
+    );
+    expect(status).toBe(200);
+    const meetingId = body.meetingId;
+
+    // Inject a closing question from the agent
+    await meetingService.sendMessage(meetingId, 'agent', 'Ready to build?', send as any);
+
+    // Kid says yes -- should NOT auto-end because meeting is kid-initiated
+    const msgRes = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/${meetingId}/message`,
+      { method: 'POST', body: JSON.stringify({ content: 'yes' }) },
+    );
+    expect(msgRes.status).toBe(200);
+
+    await waitForAsyncOps();
+
+    const updated = meetingService.getMeeting(meetingId)!;
+    expect(updated.status).toBe('active');
+  });
+
+  it('still auto-ends a system-triggered meeting normally', async () => {
+    const sessionId = createSession();
+    // System-triggered meeting (created via createInvite, not /start endpoint)
+    const meeting = await setupActiveMeeting(sessionId, 'test-meeting', [
+      'Ready to build?',
+    ]);
+
+    const { status } = await fetchJSON(
+      `/api/sessions/${sessionId}/meetings/${meeting.id}/message`,
+      { method: 'POST', body: JSON.stringify({ content: 'yes' }) },
+    );
+    expect(status).toBe(200);
+
+    await waitForAsyncOps();
+
+    const updated = meetingService.getMeeting(meeting.id)!;
+    expect(updated.status).toBe('completed');
+  });
+});
+
 describe('meeting auto-end: resolves meeting block', () => {
   it('calls resolveMeetingBlock on orchestrator after auto-end', async () => {
     const sessionId = createSession();

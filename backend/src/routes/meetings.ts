@@ -160,6 +160,9 @@ export function createMeetingRouter({ store, meetingService, meetingAgentService
       return;
     }
 
+    // Mark as kid-initiated so auto-end logic is skipped
+    meeting.kidInitiated = true;
+
     // Immediately accept with build context
     const buildContext = buildMeetingContext(entry);
     await meetingService.acceptMeeting(meeting.id, send, buildContext);
@@ -301,7 +304,7 @@ export function createMeetingRouter({ store, meetingService, meetingAgentService
     const priorMeeting = meetingService.getMeeting(meetingId);
     const agentMsgsBefore = (priorMeeting?.messages ?? []).filter((m: MeetingMessage) => m.role === 'agent');
     const lastAgentMsg = agentMsgsBefore[agentMsgsBefore.length - 1];
-    const shouldAutoEnd = lastAgentMsg && (
+    const shouldAutoEnd = !priorMeeting?.kidInitiated && lastAgentMsg && (
       (isClosingQuestion(lastAgentMsg.content) && isAffirmativeResponse(content.trim())) ||
       (isDismissalQuestion(lastAgentMsg.content) && isNegativeResponse(content.trim()))
     );
