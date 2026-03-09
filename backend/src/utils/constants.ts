@@ -59,3 +59,6 @@ export const NARRATOR_MODEL_DEFAULT = 'claude-haiku-4-5-20251001';
 
 /** Timeout for meeting blocks on task execution (auto-proceed after timeout). */
 export const MEETING_BLOCK_TIMEOUT_MS = 300_000;
+
+/** WebSocket server-side ping interval in milliseconds. */
+export const WS_PING_INTERVAL_MS = 30_000;

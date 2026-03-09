@@ -34,7 +34,10 @@ import { SpecGraphService } from './services/specGraph.js';
 import { createSpecGraphRouter } from './routes/specGraph.js';
 import { getAnthropicClient } from './utils/anthropicClient.js';
 import { getLanUrl } from './utils/lanUrl.js';
+import { WS_PING_INTERVAL_MS } from './utils/constants.js';
 import type { WSEvent } from './services/phases/types.js';
+
+const wsAlive = new WeakMap<WebSocket, boolean>();
 
 // -- State --
 
@@ -203,9 +206,16 @@ class ConnectionManager {
       this.connections.delete(sessionId);
     }
   }
+
+  *allConnections(): IterableIterator<WebSocket> {
+    for (const conns of this.connections.values()) {
+      for (const ws of conns) yield ws;
+    }
+  }
 }
 
 const manager = new ConnectionManager();
+const runtimeConnections = new Set<WebSocket>();
 
 // Wire up WebSocket + meeting cleanup when sessions are removed
 store.onCleanup = (sessionId: string) => {
@@ -392,8 +402,10 @@ export function startServer(
       }
 
       wss.handleUpgrade(request, socket, head, (ws) => {
+        wsAlive.set(ws, true);
         manager.connect(sessionId, ws);
         store.scheduleCleanup(sessionId); // Reset 5-min cleanup timer on connect/reconnect
+        ws.on('pong', () => { wsAlive.set(ws, true); });
         ws.on('close', (code, reason) => {
           (ws as any)._closeCode = code;
           (ws as any)._closeReason = reason?.toString() ?? '';
@@ -421,6 +433,10 @@ export function startServer(
       }
 
       runtimeWss.handleUpgrade(request, socket, head, (ws) => {
+        wsAlive.set(ws, true);
+        runtimeConnections.add(ws);
+        ws.on('close', () => { runtimeConnections.delete(ws); });
+        ws.on('pong', () => { wsAlive.set(ws, true); });
         ws.on('message', async (raw) => {
           try {
             const msg = JSON.parse(String(raw));
@@ -531,8 +547,10 @@ export function startServer(
     // Cancel all running orchestrators
     store.cancelAll();
 
-    // Close WebSocket server
+    // Stop heartbeat and close WebSocket servers
+    clearInterval(heartbeatInterval);
     wss.close();
+    runtimeWss.close();
 
     // Close HTTP server with a 10s force-exit
     server.close(() => {
@@ -559,6 +577,21 @@ export function startServer(
     }
   }, 2000);
   lagInterval.unref();
+
+  // WebSocket heartbeat -- protocol-level pings keep connections alive through proxies
+  const heartbeatInterval = setInterval(() => {
+    for (const ws of manager.allConnections()) {
+      if (wsAlive.get(ws) === false) { ws.terminate(); continue; }
+      wsAlive.set(ws, false);
+      ws.ping();
+    }
+    for (const ws of runtimeConnections) {
+      if (wsAlive.get(ws) === false) { ws.terminate(); continue; }
+      wsAlive.set(ws, false);
+      ws.ping();
+    }
+  }, WS_PING_INTERVAL_MS);
+  heartbeatInterval.unref();
 
   // Prune stale sessions every 10 minutes
   const pruneInterval = setInterval(() => {

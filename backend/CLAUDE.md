@@ -209,6 +209,7 @@ Client sends `turn` (text) or `audio_turn` (audio) messages. Server responds wit
 - **Cancellation**: `Orchestrator.cancel()` via AbortController; signal propagated to Agent SDK `query()` calls. Session state set to `done` on error.
 - **Content safety**: All agent prompts enforce age-appropriate output (8-14). Placeholder values sanitized before interpolation (`sanitizePlaceholder()`).
 - **Flash mutex**: `HardwareService.flash()` serializes concurrent calls via Promise-chain mutex.
+- **WebSocket heartbeat**: Server sends protocol-level pings every 30s (`WS_PING_INTERVAL_MS`). Connections that miss a pong are terminated via `ws.terminate()`. Keeps connections alive through the Vite dev proxy during heavy agent work. `wsAlive` WeakMap tracks per-connection liveness.
 - **Graceful shutdown**: SIGTERM/SIGINT handlers cancel orchestrators, close WS server, 10s force-exit. `SessionStore.onCleanup` invokes `ConnectionManager.cleanup()` for WS teardown.
 - **Graceful degradation**: Missing external tools (git, pytest, mpremote) produce warnings, not crashes.
 - **Timeouts**: Agent=300s, Tests=120s, Flash=60s. Task retry limit=2.
