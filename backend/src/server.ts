@@ -167,9 +167,13 @@ class ConnectionManager {
       this.connections.set(sessionId, new Set());
     }
     this.connections.get(sessionId)!.add(ws);
+    console.log(`[ws] connect session=${sessionId} total=${this.connections.get(sessionId)!.size}`);
   }
 
   disconnect(sessionId: string, ws: WebSocket): void {
+    const code = (ws as any)._closeCode ?? 'unknown';
+    const reason = (ws as any)._closeReason ?? '';
+    console.log(`[ws] disconnect session=${sessionId} code=${code} reason="${reason}"`);
     this.connections.get(sessionId)?.delete(ws);
   }
 
@@ -388,7 +392,14 @@ export function startServer(
       wss.handleUpgrade(request, socket, head, (ws) => {
         manager.connect(sessionId, ws);
         store.scheduleCleanup(sessionId); // Reset 5-min cleanup timer on connect/reconnect
-        ws.on('close', () => manager.disconnect(sessionId, ws));
+        ws.on('close', (code, reason) => {
+          (ws as any)._closeCode = code;
+          (ws as any)._closeReason = reason?.toString() ?? '';
+          manager.disconnect(sessionId, ws);
+        });
+        ws.on('error', (err) => {
+          console.error(`[ws] error session=${sessionId}:`, err.message);
+        });
         ws.on('message', () => {
           // Client keepalive; ignore content
         });
@@ -534,6 +545,18 @@ export function startServer(
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  // Event loop lag monitor -- logs when the loop is blocked > 100ms
+  let lastLagCheck = Date.now();
+  const lagInterval = setInterval(() => {
+    const now = Date.now();
+    const lag = now - lastLagCheck - 2000; // expected interval is 2000ms
+    lastLagCheck = now;
+    if (lag > 100) {
+      console.warn(`[diagnostics] Event loop lag: ${lag}ms`);
+    }
+  }, 2000);
+  lagInterval.unref();
 
   // Prune stale sessions every 10 minutes
   const pruneInterval = setInterval(() => {
