@@ -195,6 +195,10 @@ class ConnectionManager {
         // ignore send errors
       }
     }
+    // Yield to the event loop so the proxy can forward this frame
+    // before the next send. Prevents tight loops of ws.send() from
+    // burst-flooding the Vite dev proxy's pipe buffer.
+    await new Promise<void>(resolve => { setImmediate(resolve); });
   }
 
   cleanup(sessionId: string): void {
